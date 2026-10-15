@@ -9,10 +9,10 @@ verification outcome.
 - **Theme-anchored**: proteinopathies across neurodegeneration — Alzheimer's, ALS,
   Parkinson's, and on-demand themes (FTD, Huntington's, prion/CJD, PSP, DLB, MSA, …).
 - **Deterministic engine**: a content-addressed LLM cache avoids repeated model calls.
-- **Research plan & ledger**: the paper plan and the mandatory execution ledger
-  (any change must be logged there first) live in
-  [`docs/paper-plan.md`](docs/paper-plan.md) and
-  [`docs/paper-plan-ledger.md`](docs/paper-plan-ledger.md) — see also [AGENTS.md](AGENTS.md).
+- **Archived & citable**: the code snapshot is archived on Zenodo
+  ([10.5281/zenodo.23391897](https://doi.org/10.5281/zenodo.23391897)); the released catalog
+  (v1.5) and the evaluation materials are archived separately — see
+  [`docs/versions/`](docs/versions/) for version statistics v0.9–v1.5.
 - **Paper-driven**: records come from papers only; repositories are treated as where
   the data physically lives.
 - **Verified**: every record must be grounded in the paper text (T1), and its data
@@ -138,7 +138,7 @@ which takes precedence):
 
 ```
 DEEPSEEK_API_KEY=…          DEEPSEEK_MODEL=deepseek-v4-pro
-HTTP_PROXY=http://127.0.0.1:9674   (only used as fallback; direct-first networking)
+HTTP_PROXY=http://127.0.0.1:7890   (optional; fallback only — networking is direct-first)
 NCBI_EMAIL=…                NCBI_API_KEY=…
 HARVEST_MAX_PAPERS_PER_RUN=500     HARVEST_CONCURRENCY=6
 ```
@@ -152,7 +152,7 @@ app/catalog     read-only query layer (datasets/papers/runs/export)
 app/chat        conversational retrieval agent
 app/api         FastAPI routes + static web mount
 web             English single-page UI (Catalog / Chat / Themes / Runs / Health / Settings)
-vendor/omics-discovery   reused agent library @ branch `lite` (no heavy deps)
+vendor/omics-discovery   optional reused library for deep verification (not shipped; the core runs without it)
 scripts         init_db · serve · harvest (CLI) · backup · check · install_service
 ```
 
