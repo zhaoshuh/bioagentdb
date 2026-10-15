@@ -1,0 +1,8 @@
+name: bioagentdb
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12            # verified on 3.12.x (3.12.15 in the deployment env)
+  - pip
+  - pip:
+      - -r requirements.txt   # runtime deps pinned in requirements.txt (G-line 2026-10-15)

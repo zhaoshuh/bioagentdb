@@ -1,0 +1,155 @@
+# 预览三栈（L-0241/L-0316）：空库(8081) + 现库(8082) + 论文对齐 release(8083)
+# 代码/配置**全映射**（../:/app，与根 compose 同模式——改代码重启容器即生效，无需重建镜像）；
+# 数据各用独立目录（deploy/empty-data、deploy/live-data、deploy/release-data），不碰本机真库与 dev 环境。
+#
+# 干净 clone 起跑（G 线，2026-10-15）：
+#   1) cp .env.example .env                       # 可选：无 .env 也能起（浏览模式；聊天/挖掘需 key）
+#   2) python deploy/bootstrap.py                 # 准备数据目录（release 档自动装载 _v15 快照；见 deploy/README.md）
+#   3) docker compose -f deploy/compose.preview.yml up -d   # 镜像不存在时自动 build
+#   4) 空库 http://127.0.0.1:8081 ；现库 http://127.0.0.1:8082 ；release http://127.0.0.1:8083
+#   5) 停：docker compose -f deploy/compose.preview.yml down
+#
+# 网络说明：容器内无法访问主机 127.0.0.1 的代理（mihomo:9674），
+# 默认统一走 Docker Desktop 内网出口层 http://http.docker.internal:3128（上游=系统代理 9674）。
+# 第三方/本机直连：bash 用 `export BIOAGENTDB_CONTAINER_PROXY=`，任意 shell 可在 deploy/.env
+# 写 `BIOAGENTDB_CONTAINER_PROXY=`（空值=直连；也可指向自建代理）。不设置=保持上面默认。
+# live 栈默认不带 scheduler（防自动挖矿）；empty 栈带 scheduler，可体验"从零开矿"。
+
+name: bgdb-preview
+
+x-proxy: &proxy ${BIOAGENTDB_CONTAINER_PROXY-http://http.docker.internal:3128}
+
+x-net-env: &net-env
+  HTTP_PROXY: *proxy
+  HTTPS_PROXY: *proxy
+  http_proxy: *proxy
+  https_proxy: *proxy
+  NO_PROXY: localhost,127.0.0.1
+  no_proxy: localhost,127.0.0.1
+
+# 应用容器健康检查（与镜像内 HEALTHCHECK 同口径；scheduler 依赖它判定可起）
+x-app-healthcheck: &app-healthcheck
+  test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 20s
+
+services:
+  empty:
+    image: bioagentdb:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: bioagentdb-empty
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *net-env
+      BIOAGENTDB_HOST: 0.0.0.0
+      BIOAGENTDB_PORT: "8000"
+      BIOAGENTDB_DATA_DIR: /app/deploy/empty-data
+      BIOAGENTDB_SEED_STARTER_THEMES: "0"
+    ports: ["8081:8000"]
+    volumes:
+      - ../:/app
+    command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  empty-scheduler:
+    image: bioagentdb:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: bioagentdb-empty-scheduler
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *net-env
+      BIOAGENTDB_DATA_DIR: /app/deploy/empty-data
+      BIOAGENTDB_SEED_STARTER_THEMES: "0"
+    volumes:
+      - ../:/app
+    command: ["python", "scripts/scheduler.py"]
+    healthcheck:
+      disable: true            # scheduler 不提供 HTTP；镜像自带健康检查不适用
+    depends_on:
+      empty:
+        condition: service_healthy
+    restart: unless-stopped
+
+  live:
+    image: bioagentdb:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: bioagentdb-live
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *net-env
+      BIOAGENTDB_HOST: 0.0.0.0
+      BIOAGENTDB_PORT: "8000"
+      BIOAGENTDB_DATA_DIR: /app/deploy/live-data
+    ports: ["8082:8000"]
+    volumes:
+      - ../:/app
+    command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck: *app-healthcheck
+    restart: unless-stopped
+
+  # 公网挖矿（L-0311，用户开通）：live 数据的任务调度器——
+  # 仅处理用户经 Ming/My mining 创建的任务；收紧上限（50 篇/轮、≤2 活跃任务、≤3 任务/会话）；
+  # 不做自动预热挖矿（那属于根 compose 的 miner profile）。暂停：docker stop bioagentdb-live-scheduler
+  live-scheduler:
+    image: bioagentdb:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: bioagentdb-live-scheduler
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *net-env
+      BIOAGENTDB_DATA_DIR: /app/deploy/live-data
+      BIOAGENTDB_MINING_TASK_PAPERS_PER_ROUND: "50"
+      BIOAGENTDB_MINING_TASK_MAX_ACTIVE_TASKS: "2"
+      BIOAGENTDB_MINING_TASK_MAX_TASKS_PER_SESSION: "3"
+    volumes:
+      - ../:/app
+    command: ["python", "scripts/scheduler.py"]
+    healthcheck:
+      disable: true
+    depends_on:
+      live:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 论文对齐演示（L-0316）：服务 v1.5 冻结发布的副本（deploy/release-data），数字与论文一致；
+  # 只读用途（挖掘请用 live 栈）。URL 决策见台账 L-0310/L-0312。
+  # 快照装载：python deploy/bootstrap.py --tier release（默认取 data/releases/_v15 并校验 sha256）。
+  release:
+    image: bioagentdb:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: bioagentdb-release
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *net-env
+      BIOAGENTDB_HOST: 0.0.0.0
+      BIOAGENTDB_PORT: "8000"
+      BIOAGENTDB_DATA_DIR: /app/deploy/release-data
+    ports: ["8083:8000"]
+    volumes:
+      - ../:/app
+    command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck: *app-healthcheck
+    restart: unless-stopped

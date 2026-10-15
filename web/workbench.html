@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BioAgentDB — Ask the agent</title>
+<link rel="stylesheet" href="/styles.css"/>
+<link rel="stylesheet" href="/workbench.css?v=8"/>
+</head>
+<body class="wb">
+<header class="wb-top">
+  <a class="wb-brand" href="/">BioAgentDB</a>
+  <nav class="wb-nav">
+    <a href="/#diseases">Topics</a>
+    <a href="/#how">Method</a>
+    <a href="/#ledger">Records</a>
+    <a class="active" href="/workbench.html">Ask the agent</a>
+    <a href="/mining.html">My mining</a>
+    <a href="/guide.html">Guide</a>
+  </nav>
+  <span class="wb-live" id="wb-live">discovery workbench · live sources + catalog</span>
+</header>
+
+<main class="wb-grid">
+  <aside class="wb-col wb-sessions">
+    <div class="wb-colhead">
+      <h3>Sessions</h3>
+      <button id="wb-new" class="wb-btn small">New</button>
+    </div>
+    <div id="wb-session-list" class="wb-list"></div>
+  </aside>
+
+  <section class="wb-col wb-chat">
+    <div class="wb-modes">
+      <button id="wb-mode-research" class="wb-mode active" data-mode="research">Research</button>
+      <button id="wb-mode-ming" class="wb-mode" data-mode="ming">Ming</button>
+    </div>
+    <div id="wb-research-pane" class="wb-pane">
+      <div id="wb-log" class="wb-log"></div>
+      <div class="wb-composer">
+        <textarea id="wb-input" rows="2"
+          placeholder='e.g. "single-nucleus RNA-seq of human brain in Alzheimer disease, at least 20 samples"'></textarea>
+        <div class="wb-actions">
+          <button id="wb-send" class="wb-btn primary">Ask</button>
+          <button id="wb-stop" class="wb-btn" disabled>Stop</button>
+        </div>
+      </div>
+    </div>
+    <div id="wb-ming-pane" class="wb-pane wb-hidden">
+      <div id="mnl-log" class="wb-log"></div>
+      <div class="wb-composer">
+        <textarea id="mnl-input" rows="2"
+          placeholder='e.g. "human gut virome with shotgun metagenomics — large cohorts only"'></textarea>
+        <div class="wb-actions">
+          <button id="mnl-send" class="wb-btn primary">Send</button>
+          <button id="mnl-stop" class="wb-btn" disabled>Stop</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="wb-col wb-panel">
+    <div class="wb-colhead">
+      <h3>Results</h3>
+      <div class="wb-export">
+        <button id="wb-export-json" class="wb-btn small" disabled>JSONL</button>
+        <button id="wb-export-csv" class="wb-btn small" disabled>CSV</button>
+      </div>
+    </div>
+    <div id="wb-results" class="wb-results">
+      <p class="wb-empty">Ask a question — catalog records, external candidates and a report
+        will appear here.</p>
+    </div>
+  </aside>
+</main>
+
+<!-- ============ Record detail (shared with the ledger) ============ -->
+<div id="modal" class="modal hidden">
+  <div class="modalbox">
+    <div class="modalhead"><h3 id="modal-title"></h3><button onclick="closeModal()">x</button></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="/record-modal.js?v=1"></script>
+<script src="/workbench.js?v=13"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+[
+  {
+    "repository": "GWASCatalog",
+    "label": "GWASCatalog",
+    "pattern": "\\bGCST\\d{7,9}\\b",
+    "url": "https://www.ebi.ac.uk/gwas/studies/{acc}",
+    "source": "auto",
+    "evidence": "shape=GCST:8 n=7 examples=['GCST90027158', 'GCST90027164', 'GCST90199621', 'GCST90027158']",
+    "status": "active",
+    "version": 1,
+    "added_at": "2026-10-09T10:15:22+00:00",
+    "url_verified": true,
+    "example": "GCST90449045",
+    "verify_status": "HTTP 200"
+  },
+  {
+    "repository": "NIAGADS",
+    "label": "NIAGADS",
+    "pattern": "\\bNG\\d{4,6}\\b",
+    "url": "https://www.niagads.org/datasets/{acc}",
+    "source": "auto",
+    "evidence": "shape=NG:5 n=2 examples=['NG00067', 'NG00100']",
+    "status": "active",
+    "version": 1,
+    "added_at": "2026-10-09T10:15:22+00:00",
+    "url_verified": true,
+    "example": "NG00100",
+    "verify_status": "HTTP 200"
+  }
+]

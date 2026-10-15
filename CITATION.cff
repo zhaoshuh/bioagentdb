@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software or the released catalog, please cite the article and the archived release."
+title: "BioAgentDB: an adversarial, machine-verified pipeline for literature-mined catalogs of announced multi-omics datasets"
+type: software
+license: MIT
+repository-code: "https://github.com/zhaoshuh/bioagentdb"
+keywords:
+  - bioinformatics
+  - literature mining
+  - data availability
+  - multi-omics datasets
+  - large language models
+authors:
+  - family-names: Zhao
+    given-names: Shuheng
+version: "1.5.0"
+date-released: "2026-10-15"

@@ -1,0 +1,102 @@
+# BioAgentDB 策略配置 —— 文件真源（台账 L-0206/07/08：所有可配置参数一律文件化）
+#
+# 用法：cp config/bioagentdb.example.toml config/bioagentdb.toml 后修改
+#       （bioagentdb.toml 已在 .gitignore；本 example 随仓库同行发布）
+# 优先级：.env / 环境变量 > config/bioagentdb.toml > 代码默认
+# 命名：键名 = 各级节名以 "_" 连接（如 [mining.task] papers_per_round →
+#       mining_task_papers_per_round）；环境变量覆盖名 = BIOAGENTDB_ + 大写键名。
+# 生效：修改后重启服务 / 调度器。
+
+# 顶层开关（L-0225）
+seed_starter_themes = 0         # 起始主题播种（0=空部署纯空白；1=写入疾病起始主题）
+web_search_provider = "auto"    # 联网查证提供方（auto|off；off=关闭；v1.6，L-0292）
+
+[mining]
+# 谁能建任务（决策 c：1 = 任何人可建；0 = 关闭创建入口）
+task_creation_enabled = 1
+ming_max_rounds = 12            # Ming 对话防跑飞安全阀（轮；正常由 agent 自行收敛，L-0235）
+
+[mining.task]
+papers_per_round = 200          # 每轮论文上限（任务默认；用户建任务时可调）
+papers_per_round_min = 50       # 用户可设下限
+papers_per_round_max = 2000     # 用户可设上限
+recatalog = 1                   # 目录可复挖任务挖过的论文（1=池分离开启；0=任务消耗池）
+publish_records = 1             # 任务记录发布进公共目录（1=默认公开；0=旧私有模式，L-0225）
+cadence_hours = 24              # 巡检间隔（小时；先穷尽、后巡检）
+cadence_hours_min = 1
+cadence_hours_max = 168
+max_tasks_per_session = 10      # 同会话（匿名 session）任务数上限
+max_active_tasks = 3            # 全站"排队 + 运行"任务数上限（系统级总闸之一）
+cost_hint_per_paper_usd = 0.0   # 费用预估系数（0 = 只显示篇数，不显示金额）
+budget_test_cap = 100           # 旧版一句话下单（quick）预算闸——测试档
+budget_full_cap = 2000          # 旧版一句话下单（quick）预算闸——全量档
+
+[scheduler]
+enabled = 1                     # 常驻调度器开关（scripts/scheduler.py）
+poll_seconds = 10               # 轮询间隔
+global_max_miners = 1           # 同时运行的矿机数上限（系统级总闸之一）
+single_active_per_theme = 1     # 同主题仅一条活跃矿线
+restart_max_per_hour = 6        # 崩溃重启上限（次/小时）
+backoff_seconds = 30            # 重启退避
+max_task_failures = 5           # 单任务连续失败达到即置 error
+patrol_batch = 100              # 巡检轮论文上限（min(每轮上限, 本值)）
+patrol_lookback_days = 3        # 巡检重叠窗（天；只扫近 N 天增量）
+patrol_max_lookback_days = 30   # 巡检窗上限（停机更久也不超过 N 天，L-0215）
+orphan_stale_minutes = 60       # 孤儿矿机"pid 活但心跳陈旧"的判定窗（分钟；兜底 pid 复用）
+orphan_retry_minutes = 5        # 心跳陈旧后的复查退避（分钟；保 pid 防同 tick 换矿，L-0217）
+orphan_max_defers = 3           # 推迟次数上限（超过→强制清 pid 重排，L-0221）
+
+[miner]
+workers_default = 3             # 单矿机默认线程数
+workers_max = 6                 # 单矿机线程数上限
+pool_keep = 200                 # 论文池低于此值即补给
+idle_sleep = 45                 # 池空时的巡检休眠（秒）
+heartbeat_every = 20            # 心跳间隔（秒）
+exhaust_probe_s = 20            # 任务模式：池空探测间隔（秒）
+exhaust_streak = 2              # 任务模式：连续零补给次数即判"挖尽"
+claim_stale_minutes = 30        # 陈旧 claimed 回收时限（分钟；进程被杀留下的 in-flight）
+drain_timeout_s = 300           # 退出前排空 in-flight 论文的最长等待（秒）
+refill_error_streak = 3         # 连续补货**异常**次数 → 判"源站异常"，退避重试（不假报挖尽）
+source_retry_minutes = 15       # 源站异常后的重试间隔（分钟）
+max_attempts = 3                # 单篇论文领取-失败重试上限（达到后落 error 终态，L-0217）
+noacc_review = 1                # no_accessions 二次 LLM 复核（逐字校验；有链接即入档；沉淀 extract_misses，L-0246/L-0248）
+
+[harvest]
+batch_size = 100                # 服务内 runner 每批处理论文数
+
+[sources.europepmc]
+search_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+page_size = 100                 # Europe PMC 分页大小
+
+[verify]
+# 核验加权（键 = 检查项名：t1_paper_grounding / t2_link_reachable / t2_source_metadata）
+weights = { t1_paper_grounding = 1.5, t2_link_reachable = 1.0, t2_source_metadata = 1.5 }
+
+[workbench]
+top_n = 10                      # 目录召回条数
+k_fulltext = 8                  # 全文深挖篇数
+source_want = 15                # 四路源候选目标
+time_budget_s = 25              # 单轮检索时间预算（秒）
+verify_max = 6                  # 现场核验上限
+max_clarify = 2                 # 最多澄清轮数
+pdf_session_cap = 20            # 会话内 PDF 处理上限
+default_organism = "Homo sapiens"
+
+[web_research]
+# 联网查证（v1.6，L-0292）：未知知识 → 联网查清 → 改写论文检索（DuckDuckGo HTML + 读页 + LLM 蒸馏）
+enabled = 1                     # 总开关（0=关闭；也可用顶层 web_search_provider="off"）
+max_actions = 6                 # 单次查证动作上限（搜索+读页）
+timeout_s = 30                  # 单次查证墙钟（秒）
+cache_days = 7                  # 研究简报缓存 TTL（天）
+max_terms = 8                   # 并入检索词的查证词上限
+
+[supervisor]
+# 内部预热矿机的主题（旧保活器；调度器管用户任务）
+themes = ["alzheimers-disease", "als", "parkinsons-disease"]
+max_restarts_per_hour = 6
+
+[collect]
+workers = 3                     # 用户 CLI collect.py 默认并发
+limit = 100                     # 每轮论文配额
+rounds = 50                     # 最大轮数
+empty_rounds = 2                # 连续空轮即判"挖尽"

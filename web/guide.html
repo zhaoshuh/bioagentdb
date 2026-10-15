@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BioAgentDB — User guide</title>
+<link rel="stylesheet" href="/styles.css?v=47">
+<style>
+.g-hero { padding-bottom: 36px; }
+.g-toc { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 0; }
+.g-toc a { font-size: 13px; color: var(--teal-ink); background: var(--teal-tint);
+  border: 1px solid #cfe4dd; border-radius: 999px; padding: 5px 12px; text-decoration: none; }
+.g-toc a:hover { background: #dcebe6; }
+.g-sec { display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 46px;
+  align-items: start; }
+@media (max-width: 1000px) { .g-sec { grid-template-columns: 1fr; } }
+.g-sec h2 { font-family: var(--serif); font-size: 26px; margin: 0 0 10px;
+  letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; }
+.g-sec h2 .n { flex: none; display: inline-flex; width: 30px; height: 30px;
+  border-radius: 50%; background: var(--teal); color: #fff;
+  font: 600 15px/30px var(--sans); justify-content: center; }
+.g-sec p { color: var(--ink-soft); margin: 8px 0; }
+.g-steps { margin: 12px 0 0; padding-left: 20px; color: var(--ink-soft); }
+.g-steps li { margin: 7px 0; }
+.g-steps b { color: var(--ink); }
+.g-tip { background: var(--teal-tint); border-left: 3px solid var(--teal);
+  padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 14px;
+  color: var(--ink-soft); margin-top: 16px; }
+.g-tip.warn { background: var(--amber-tint); border-color: var(--amber); }
+.g-fig { margin: 0; }
+.g-fig img { width: 100%; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 26px rgba(22,31,44,.08); }
+.g-fig figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.g-fig figcaption b { color: var(--ink); }
+.g-faq dt { font-weight: 600; margin-top: 14px; }
+.g-faq dd { margin: 4px 0 0; color: var(--ink-soft); }
+.g-foot { padding: 44px 40px; text-align: center; color: var(--muted); font-size: 13px; }
+.g-foot a { color: var(--teal-ink); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<nav class="topnav" id="topnav">
+  <a class="wordmark" href="/">BioAgentDB</a>
+  <div class="navlinks">
+    <a href="/#diseases">Topics</a>
+    <a href="/#how">Method</a>
+    <a href="/#ledger">Records</a>
+    <a class="navlink" href="/workbench.html">Ask the agent</a>
+    <a class="navlink" href="/mining.html">My mining</a>
+    <a class="active" href="/guide.html">Guide</a>
+  </div>
+</nav>
+
+<header class="section g-hero">
+  <h1 class="sh">How to use BioAgentDB</h1>
+  <p class="sh-sub">A five-minute guide: search the catalog, read a record, ask the agent,
+    mine a topic — and know why you can trust what you see.</p>
+  <nav class="g-toc">
+    <a href="#g-what">1 · What this is</a>
+    <a href="#g-search">2 · Search</a>
+    <a href="#g-record">3 · Read a record</a>
+    <a href="#g-ask">4 · Ask the agent</a>
+    <a href="#g-ming">5 · Mining (Ming)</a>
+    <a href="#g-track">6 · My mining</a>
+    <a href="#g-export">7 · Export</a>
+    <a href="#g-trust">8 · Why trust it</a>
+    <a href="#g-faq">9 · FAQ</a>
+  </nav>
+</header>
+
+<section id="g-what" class="section g-sec">
+  <div>
+    <h2><span class="n">1</span>What this is</h2>
+    <p>BioAgentDB is a catalog of <b>datasets announced in biomedical papers</b> — for any
+      research topic (diseases are just one kind). For every record it keeps the paper's own
+      words — a verbatim evidence quote — and a live link to the data. It never stores the data
+      itself.</p>
+    <ul class="g-steps">
+      <li>The <b>AI agent</b> reads each paper: abstract and Data Availability statement.</li>
+      <li>Three <b>adversarial reviewers</b> challenge every claim before it enters the catalog.</li>
+      <li>Every kept record carries the <b>exact sentence</b> it came from and a <b>checked link</b>.</li>
+      <li>Missing something? Ask the agent to <b>mine it</b> — <b>Ming</b> keeps a task running
+        until the literature is exhausted, then patrols for new papers (step 5).</li>
+    </ul>
+    <div class="g-tip">Records are read-only by design — nothing here can be edited or deleted
+      from the interface.</div>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/home-hero.annotated.png?v=4" alt="BioAgentDB homepage with the agent illustration and live counters">
+    <figcaption><b>Home.</b> The agent at work: papers → AI agent → checks → BioAgentDB,
+      with live counters (papers read, mined with data).</figcaption>
+  </figure>
+</section>
+
+<section id="g-search" class="section g-sec">
+  <div>
+    <h2><span class="n">2</span>Search the catalog</h2>
+    <ul class="g-steps">
+      <li>Type into the <b>search box</b>: a topic ("Alzheimer", "gut microbiome"), a gene
+        ("APOE"), a tissue, a modality, or an accession like <b>GSE277709</b>.</li>
+      <li>Combine with the <b>filters</b>: topic, modality, organism, and status.</li>
+      <li>Press <b>Enter</b> or the <b>Search</b> button. Results are paper cards, newest first.</li>
+    </ul>
+    <div class="g-tip">Every result keeps its <b>accessions</b> and its <b>evidence quote</b> —
+      you can judge a record without leaving the list.</div>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/search-results.annotated.png?v=4" alt="Search results for Alzheimer with accessions and evidence quotes">
+    <figcaption><b>Searching "Alzheimer".</b> Each card shows the paper, topic chips,
+      accessions, and the sentence that announces the data.</figcaption>
+  </figure>
+</section>
+
+<section id="g-record" class="section g-sec">
+  <div>
+    <h2><span class="n">3</span>Read a record</h2>
+    <ul class="g-steps">
+      <li><b>Click any card</b> to open the detail view.</li>
+      <li>See the <b>datasets announced in the paper</b>, each with a <b>verified</b> chip,
+        repository, accession and confidence.</li>
+      <li>Follow the <b>repository link</b> (and direct download where available) to get the data.</li>
+      <li>Read the <b>evidence</b>: the zone-tagged sentence (abstract or Data Availability)
+        that the record is grounded in.</li>
+    </ul>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/record-detail.annotated.png?v=4" alt="Record detail view with accession, links and evidence quote">
+    <figcaption><b>A record.</b> GSE277709 — verified, with GEO links and the verbatim
+      evidence sentence from the paper.</figcaption>
+  </figure>
+</section>
+
+<section id="g-ask" class="section g-sec">
+  <div>
+    <h2><span class="n">4</span>Ask the agent</h2>
+    <ul class="g-steps">
+      <li>Describe what you need in plain language — any research topic (a disease, a
+        biological process or a technique) with organ/organism details
+        ("single-nucleus RNA-seq of human brain in Alzheimer's disease, at least 20 samples").</li>
+      <li>The agent may ask <b>one clarifying question</b> (for example, the organism);
+        answer it or say <b>"any"</b> to skip.</li>
+      <li>You get a report with two parts: <b>catalog records — verified, with evidence</b>,
+        and <b>papers to inspect</b> (live-source finds that are not yet verified) — press
+        <b>Verify now</b> to read a paper's full text and check its links on the spot.</li>
+      <li>Every search adds a <b>result set</b> to the RESULTS panel — timestamped, newest first.
+        Expand a set to review its records (<b>By paper</b> or <b>By dataset</b>), and
+        <b>tick the sets you want to export</b>.</li>
+      <li>Open any cited record right where you are — <b>view record →</b> shows its datasets,
+        links and evidence in place — or tick result sets in the RESULTS panel and export them
+        as JSONL / CSV.</li>
+    </ul>
+    <div class="g-tip warn">Non-biomedical questions are refused on purpose — the agent only
+      answers what the catalog and the papers can support.</div>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/ask-session.annotated.png?v=4" alt="Ask session with progress log, grounded answer and results panel">
+    <figcaption><b>A real session.</b> The agent searches the catalog and five live sources,
+      then reports verified records with evidence — plus papers worth a look. Every search
+      lands in the RESULTS panel as a timestamped result set, ready to export.</figcaption>
+  </figure>
+</section>
+
+<section id="g-ming" class="section g-sec">
+  <div>
+    <h2><span class="n">5</span>Mine anything — Ming</h2>
+    <p>Missing something? Open <b>Ask the agent</b> and switch to <b>Ming</b> — the mining
+      mode. Describe the topic in one sentence; the agent chats it through with you —
+      plain-text follow-up questions, free-text answers (say <b>any</b> to skip) — and then
+      proposes the task.</p>
+    <ul class="g-steps">
+      <li><b>Chat</b> — the agent keeps asking until it has enough;
+        answer in your own words in the same composer.</li>
+      <li><b>Start Ming</b> — a resident scheduler mines in the background: first until the
+        literature is exhausted, then a patrol for new papers.</li>
+      <li><b>Verified records are published to the public catalog</b> and also tracked per task
+        (operators can set a private-only mode in the config file).</li>
+    </ul>
+    <div class="g-tip">Deploying your own? With the default settings a fresh instance starts
+      blank &mdash; you mine exactly the topics you need.</div>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/ming-panel.annotated.png?v=4"
+         alt="Ming chat: the agent asks follow-up questions, then shows a mining proposal with a Start button">
+    <figcaption><b>Ming.</b> A conversation, like Research: answer a few questions in plain
+      text &rarr; theme, queries and budget &mdash; then it runs in the background.</figcaption>
+  </figure>
+</section>
+
+<section id="g-track" class="section g-sec">
+  <div>
+    <h2><span class="n">6</span>Track runs — My mining</h2>
+    <ul class="g-steps">
+      <li><b>My mining</b> lists your tasks: status, records found, papers read, and the original
+        intent you asked for.</li>
+      <li><b>Pause / resume / stop / restart</b> any task — a stopped or failed task goes back to
+        the queue with <b>Restart</b> (it resumes when the scheduler is running); <b>export</b>
+        its records as JSONL or CSV.</li>
+      <li><b>Topics</b> (switch with the <b>Tasks | Topics</b> tabs): rename a topic, or hide it
+        from the catalog lists — hiding is reversible, and a hidden topic reappears when you
+        mine it again.</li>
+      <li>Each record is the same verified object you see in the public catalog.</li>
+    </ul>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/mining-progress.annotated.png?v=4"
+         alt="My mining with Tasks and Topics tabs, a stopped task with Restart, and its verified records">
+    <figcaption><b>My mining.</b> <b>Tasks | Topics</b> tabs (the same switch style as
+      Research | Ming) — a stopped or failed task can be <b>Restart</b>ed; records are verified and
+      published to the catalog.</figcaption>
+  </figure>
+</section>
+
+<section id="g-export" class="section g-sec">
+  <div>
+    <h2><span class="n">7</span>Export</h2>
+    <ul class="g-steps">
+      <li>In the ledger, press <b>Export</b> to download a <b>CSV</b> of the dataset records.</li>
+      <li>In the Ask workbench, each search is a <b>result set</b> in the <b>RESULTS</b> panel —
+        tick the sets you want, then export them as <b>JSONL</b> or <b>CSV</b>.</li>
+      <li>Exports contain metadata, evidence quotes and links — never the data files themselves.</li>
+    </ul>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/export-toolbar.annotated.png?v=4" alt="Ledger toolbar with Search and Export buttons">
+    <figcaption><b>Export.</b> The button sits next to Search in the ledger toolbar.</figcaption>
+  </figure>
+</section>
+
+<section id="g-trust" class="section g-sec">
+  <div>
+    <h2><span class="n">8</span>Why you can trust it</h2>
+    <ul class="g-steps">
+      <li><b>T1 — grounded:</b> a record's accession must appear in its own evidence quote,
+        taken from the paper (a regrounding step finds the exact sentence if needed).</li>
+      <li><b>T2 — reachable:</b> the link is checked; the record says when it was last verified.</li>
+      <li><b>Three adversarial reviewers</b> — veracity, coverage, metadata — challenge every
+        candidate before it is kept; rejected and fixed records stay in the audit trail.</li>
+      <li><b>Statuses:</b> "verified" = passed both gates; "paper-verified" = grounded in the paper
+        text with a checked link.</li>
+    </ul>
+    <div class="g-tip">The result: you can always trace a record back to the sentence that
+      announced it — and to a live link. That is the whole point.</div>
+  </div>
+  <figure class="g-fig">
+    <img src="/guide/img/record-detail.annotated.png?v=4" alt="Evidence quote and verified status in a record">
+    <figcaption><b>Grounding in practice.</b> The evidence quote contains the accession,
+      and the link is checked — the two gates, visible on every record.</figcaption>
+  </figure>
+</section>
+
+<section id="g-faq" class="section g-sec">
+  <div>
+    <h2><span class="n">9</span>FAQ</h2>
+    <dl class="g-faq">
+      <dt>Can I edit or delete a record?</dt>
+      <dd>No — read-only is a design rule. Records change only through a new mining release.</dd>
+      <dt>Where does the data live?</dt>
+      <dd>In the original repositories (GEO, PRIDE, dbGaP, Zenodo…). BioAgentDB keeps the
+        announcement, the evidence and the link.</dd>
+      <dt>How fresh is the catalog?</dt>
+      <dd>This build is <b>v1.5</b> (October 2026); the agent keeps reading new papers, so the
+        catalog is designed to grow with the literature.</dd>
+      <dt>What does an accession look like?</dt>
+      <dd>GSE… (GEO), PXD… (PRIDE), phs… (dbGaP), E-MTAB… (BioStudies), 10.5281/zenodo… —
+        search any of them directly.</dd>
+      <dt>Can I mine a topic that is not a disease?</dt>
+      <dd>Yes — diseases are just one kind of topic. Use <b>Ming</b> (Ask the agent &rarr; Ming)
+        and describe whatever you need.</dd>
+      <dt>Where do mined records go?</dt>
+      <dd>By default they are verified and <b>published to the public catalog</b>, and also
+        tracked per task under <b>My mining</b>. Operators can switch to a private-only mode in
+        the config file.</dd>
+      <dt>Can I run my own instance?</dt>
+      <dd>Yes — run the Docker deployment; with the default settings it starts blank (no starter
+        themes) and grows with exactly what you mine.</dd>
+      <dt>Can I cite this catalog?</dt>
+      <dd>Yes — cite the paper and the release version shown in the footer of the home page.</dd>
+    </dl>
+  </div>
+  <div></div>
+</section>
+
+<footer class="g-foot">
+  BioAgentDB · v1.5 (October 2026) ·
+  <a href="/">Home</a> · <a href="/#ledger">Records</a> · <a href="/workbench.html">Ask the agent</a>
+</footer>
+
+</body>
+</html>

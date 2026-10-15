@@ -1,0 +1,284 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BioAgentDB — Paper-Verified Omics Data Catalog</title>
+<link rel="stylesheet" href="/styles.css?v=47">
+</head>
+<body>
+
+<nav class="topnav" id="topnav">
+  <a class="wordmark" href="#hero">BioAgentDB</a>
+  <div class="navlinks">
+    <a href="#diseases">Topics</a>
+    <a href="#how">Method</a>
+    <a href="#ledger">Records</a>
+    <a class="navlink" href="/workbench.html">Ask the agent</a>
+    <a class="navlink" href="/mining.html">My mining</a>
+    <a href="/guide.html">Guide</a>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header id="hero" class="section">
+  <h1 class="display">An AI agent mines the literature.
+    BioAgentDB turns it into a <em>searchable catalog</em> of public datasets.</h1>
+  <p class="lede">BioAgentDB is an AI-built catalog of public omics datasets announced in
+    biomedical papers. The agent reads each paper &mdash; abstract and Data Availability
+    statement &mdash; extracts the datasets it announces, checks every claim against the paper,
+    and keeps what it can verify: each record carries the paper's own words and a live link.
+    Search it to find data for any research topic &mdash; diseases included &mdash; in minutes, not weeks.
+    <a href="/paper/paper.pdf" target="_blank" rel="noopener">Read the paper (PDF)</a></p>
+
+  <figure class="mining">
+    <p class="mining-cap"><b>AI agent</b> at work &mdash; data is mined from papers, not typed in by hand.</p>
+    <p class="mining-live" id="mining-live">
+      <span class="live-dot" id="live-dot"></span><span id="live-status">agent idle</span>
+      &middot; read <b id="live-read">0</b> papers
+      &rarr; mined <b id="live-mined">0</b> with data
+      &middot; <span id="live-queued">0</span> queued
+      &middot; <span id="live-speed">&mdash;</span>
+    </p>
+    <svg viewBox="52 40 1000 312" role="img"
+         aria-label="An AI mining agent reads papers, extracts the datasets they announce, checks every claim against the paper, and keeps verified records in BioAgentDB.">
+      <defs>
+        <linearGradient id="gSheet" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f3f7f5"/>
+        </linearGradient>
+        <linearGradient id="gAgent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#eaf4f1"/><stop offset="1" stop-color="#d3e7e1"/>
+        </linearGradient>
+        <radialGradient id="gGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stop-color="#0f766e" stop-opacity=".20"/>
+          <stop offset="1" stop-color="#0f766e" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="gDb" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f8fbf9"/><stop offset="1" stop-color="#eef4f1"/>
+        </linearGradient>
+        <marker id="arrow" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,1 L9,5 L0,9 z" fill="#7fb3a8"/>
+        </marker>
+      </defs>
+
+      <!-- 1. papers -->
+      <g class="il-papers">
+        <rect x="60" y="84" width="118" height="126" rx="9" fill="#f2f6f4" stroke="#dfe7e3"/>
+        <rect x="74" y="72" width="118" height="126" rx="9" fill="url(#gSheet)" stroke="#d5dfda"/>
+        <rect x="88" y="60" width="118" height="126" rx="9" fill="#ffffff" stroke="#c8d4ce"/>
+        <rect x="104" y="84" width="86" height="6" rx="3" fill="#e6ece8"/>
+        <rect x="104" y="102" width="70" height="6" rx="3" fill="#e6ece8"/>
+        <rect x="104" y="120" width="86" height="6" rx="3" fill="#cfe4dd"/>
+        <rect x="104" y="138" width="78" height="6" rx="3" fill="#e6ece8"/>
+        <rect x="104" y="156" width="58" height="6" rx="3" fill="#e6ece8"/>
+      </g>
+
+      <!-- 2. arrow: papers -> agent (flowing) -->
+      <path id="f1" class="flow" d="M214,141 H282" marker-end="url(#arrow)"/>
+      <text class="il-tag" x="248" y="126">read</text>
+
+      <!-- 3. agent -->
+      <g class="il-agent">
+        <circle cx="352" cy="141" r="86" fill="url(#gGlow)"/>
+        <circle class="orbit" cx="352" cy="141" r="76" fill="none" stroke="#a8d3c9" stroke-dasharray="4 7"/>
+        <circle cx="352" cy="141" r="56" fill="url(#gAgent)" stroke="#5aa79a" stroke-width="1.8"/>
+        <g stroke="#0f766e" stroke-width="1.6" opacity=".6">
+          <line x1="352" y1="141" x2="352" y2="111"/>
+          <line x1="352" y1="141" x2="323.5" y2="131.7"/>
+          <line x1="352" y1="141" x2="334.4" y2="165.3"/>
+          <line x1="352" y1="141" x2="369.6" y2="165.3"/>
+          <line x1="352" y1="141" x2="380.5" y2="131.7"/>
+        </g>
+        <g fill="#ffffff" stroke="#0f766e" stroke-width="1.8">
+          <circle cx="352" cy="111" r="5.5"/><circle cx="323.5" cy="131.7" r="5.5"/>
+          <circle cx="334.4" cy="165.3" r="5.5"/><circle cx="369.6" cy="165.3" r="5.5"/>
+          <circle cx="380.5" cy="131.7" r="5.5"/>
+        </g>
+        <circle class="core" cx="352" cy="141" r="8" fill="#0f766e"/>
+      </g>
+
+      <!-- 4. arrow: agent -> reviewers -->
+      <path id="f2" class="flow" d="M436,141 H534" marker-end="url(#arrow)"/>
+
+      <!-- 5. three reviewers -->
+      <g class="il-reviewers">
+        <rect x="546" y="114" width="54" height="54" rx="14" fill="#ffffff" stroke="#e3ded0"/>
+        <rect x="610" y="114" width="54" height="54" rx="14" fill="#ffffff" stroke="#e3ded0"/>
+        <rect x="674" y="114" width="54" height="54" rx="14" fill="#ffffff" stroke="#e3ded0"/>
+        <g fill="none" stroke="#a16207" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M560,141 l7,8 l13,-16"/>
+          <path d="M624,141 l7,8 l13,-16"/>
+          <path d="M688,141 l7,8 l13,-16"/>
+        </g>
+      </g>
+
+      <!-- 6. arrow: reviewers -> db -->
+      <path id="f3" class="flow" d="M736,141 H830" marker-end="url(#arrow)"/>
+
+      <!-- travelling data tokens (the agent at work) -->
+      <g class="tokens">
+        <circle r="3.8" fill="#0f766e" opacity=".85">
+          <animateMotion dur="3s" repeatCount="indefinite" begin="0s"><mpath href="#f1"/></animateMotion>
+        </circle>
+        <circle r="3.8" fill="#0f766e" opacity=".85">
+          <animateMotion dur="2.2s" repeatCount="indefinite" begin="0.7s"><mpath href="#f2"/></animateMotion>
+        </circle>
+        <circle r="3.8" fill="#0f766e" opacity=".85">
+          <animateMotion dur="2.6s" repeatCount="indefinite" begin="1.4s"><mpath href="#f3"/></animateMotion>
+        </circle>
+      </g>
+
+      <!-- 7. BioAgentDB cylinder -->
+      <g class="il-db">
+        <path d="M836,104 L836,196 A86,22 0 0 0 1008,196 L1008,104 Z" fill="url(#gDb)" stroke="#cfdad5"/>
+        <path d="M836,140 A86,22 0 0 0 1008,140" fill="none" stroke="#dbe4e0"/>
+        <path d="M836,168 A86,22 0 0 0 1008,168" fill="none" stroke="#dbe4e0"/>
+        <ellipse cx="922" cy="104" rx="86" ry="22" fill="#ffffff" stroke="#c8d4ce"/>
+      </g>
+
+      <!-- labels -->
+      <text class="lbl" x="147" y="252">Papers</text>
+      <text class="sub" x="147" y="272">abstract + Data Availability</text>
+      <text class="lbl agent-lbl" x="352" y="252">AI agent</text>
+      <text class="sub" x="352" y="272">reads / extracts / verifies</text>
+      <text class="lbl" x="637" y="252">Checks</text>
+      <text class="sub" x="637" y="272">grounded &middot; link-checked</text>
+      <text class="lbl" x="922" y="252">BioAgentDB</text>
+      <text class="sub" x="922" y="272">records / evidence / live links</text>
+
+      <!-- in-SVG call to action -->
+      <g class="svg-cta" role="button" tabindex="0" aria-label="Ask the AI agent"
+         onclick="location.href='/workbench.html'"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.href='/workbench.html'}">
+        <rect class="cta-bg" x="416" y="294" width="248" height="48" rx="24"/>
+        <path class="cta-glyph" d="M448,308 h20 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-11 l-7,7 v-7 h-2 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z"/>
+        <text class="cta-text" x="556" y="324">Ask the AI agent</text>
+      </g>
+    </svg>
+  </figure>
+
+  <div class="hero-cta cta-html">
+    <button class="primary" onclick="location.href='/workbench.html'">Ask the AI agent</button>
+    <span class="cta-hint">search the catalog &mdash; or tell the agent what to mine next</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="n" id="hs-papers">0</span><span class="l">papers mined by the agent</span></div>
+    <div class="stat"><span class="n" id="hs-scanned">0</span><span class="l">papers read</span></div>
+    <div class="stat"><span class="n" id="hs-themes">0</span><span class="l">topics</span></div>
+  </div>
+  <div class="evidence-band" id="hero-band">
+    <span class="ev-label">Sample record mined by the agent</span>
+    <blockquote id="hero-quote">&hellip;</blockquote>
+    <span class="ev-src" id="hero-src"></span>
+  </div>
+</header>
+
+<!-- ============ Topics ============ -->
+<section id="diseases" class="section">
+  <h2 class="sh">Topics</h2>
+  <p class="sh-sub">Every topic the agent has mined &mdash; diseases are just one kind. Ask in
+    <b>Ming</b> for more.</p>
+  <div class="diseases" id="diseases-list"></div>
+  <div class="morewrap"><button class="ghost" id="diseases-more" style="display:none"
+      onclick="toggleDiseases()">Show all</button></div>
+</section>
+
+<!-- ============ Method ============ -->
+<section id="how" class="section">
+  <h2 class="sh">Inside the agent</h2>
+  <p class="sh-sub">How the AI agent turns a paper into a verified record in BioAgentDB.</p>
+
+  <div class="howgrid">
+    <ol class="steps">
+      <li class="step active" data-step="1"><span class="stepno">1</span>
+        <div><b>The agent reads the paper</b><p>It pulls the open-access full text and the Data Availability section.</p></div></li>
+      <li class="step" data-step="2"><span class="stepno">2</span>
+        <div><b>The agent extracts the accessions</b><p>Every repository ID the paper announces &mdash; GSE, PXD, PRJ, MTBLS, Zenodo&hellip;</p></div></li>
+      <li class="step" data-step="3"><span class="stepno">3</span>
+        <div><b>Three reviewers challenge the agent</b><p>Veracity, coverage and metadata red-teamers interrogate each claim.</p></div></li>
+      <li class="step" data-step="4"><span class="stepno">4</span>
+        <div><b>Only then does it enter BioAgentDB</b><p>The record is stored with the paper's exact quote and a live link to the data.</p></div></li>
+    </ol>
+    <div class="howpanel">
+      <div class="evidence-band">
+        <span class="ev-label">Example, step 4</span>
+        <blockquote>&ldquo;The mass spectrometry proteomic data have been deposited in the ProteomeXchange Consortium via the PRIDE partner repository with the dataset identifier PXD058370.&rdquo;</blockquote>
+        <span class="ev-src">The ligand preference of LRP1 is regulated by O-glycans &middot; PXD058370</span>
+      </div>
+      <p class="how-note">Every record keeps the exact sentence it came from. If a reviewer finds a mismatch, the agent corrects or drops the record &mdash; never quietly keeps it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Ledger ============ -->
+<section id="ledger" class="section">
+  <div class="ledger-head">
+    <h2 class="sh">The ledger <span class="live-dot idle" id="ledger-dot" title="live"></span></h2>
+    <div class="seg" role="radiogroup" aria-label="Ledger granularity">
+      <button class="seg-btn active" role="radio" aria-checked="true" data-mode="papers"
+              onclick="setLedgerMode('papers')">Papers <b id="seg-papers">0</b></button>
+      <button class="seg-btn" role="radio" aria-checked="false" data-mode="datasets"
+              onclick="setLedgerMode('datasets')">Datasets <b id="seg-datasets">0</b></button>
+    </div>
+  </div>
+  <p class="howto">New here? <b>Search</b> the ledger, <b>open a record</b> for its evidence,
+    or <b>ask the agent</b> in plain language — see the
+    <a href="/guide.html">3-step guide</a>.</p>
+  <div class="ledger-toolbar">
+    <input id="rec-q" placeholder="Search papers, tissues, modalities, accessions&hellip;"
+           onkeydown="if(event.key==='Enter')ledgerSearch()">
+    <select id="rec-theme" onchange="ledgerSearch()"><option value="">All topics</option></select>
+    <select id="rec-modality" onchange="ledgerSearch()"><option value="">All modalities</option></select>
+    <select id="rec-organism" onchange="ledgerSearch()"><option value="">All organisms</option></select>
+    <select id="rec-status" onchange="ledgerSearch()">
+      <option value="">All statuses</option>
+      <option value="verified,paper_verified">Verified + paper-verified</option>
+      <option value="verified">Verified only</option>
+      <option value="paper_verified">Paper-verified only</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <button class="primary" onclick="ledgerSearch()">Search</button>
+    <button class="ghost" onclick="exportCsv()">Export</button>
+  </div>
+  <div class="evidence-band ledger-band" id="ledger-band">
+    <span class="ev-label">Hover a record</span>
+    <blockquote id="ledger-quote">&hellip;</blockquote>
+    <span class="ev-src" id="ledger-src"></span>
+  </div>
+  <div id="rec-list" class="ledger"></div>
+  <div class="morewrap"><button class="ghost" id="load-more" onclick="loadMore()">Load more</button></div>
+  <p class="muted count" id="rec-count"></p>
+</section>
+
+<!-- ============ Ask (modal, opened from the hero) ============ -->
+<div id="chat-modal" class="modal hidden">
+  <div class="modalbox" style="max-width:780px">
+    <div class="modalhead"><h3>Ask the AI agent</h3><button onclick="closeChat()">x</button></div>
+    <div class="chatbox" style="border:0; border-radius:0; height:min(520px,64vh)">
+      <div id="chat-log" class="chatlog"></div>
+      <div class="chatin">
+        <textarea id="chat-input" rows="2"
+          placeholder="e.g. &quot;gut microbiome metagenomics&quot; or &quot;single-nucleus RNA-seq of human brain in Alzheimer disease&quot;"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend()}"></textarea>
+        <button class="primary" onclick="chatSend()">Ask</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="foot">
+  An agent that reads. A database that keeps. Three reviewers that won't let go.
+<div class="foot-rel" style="margin-top:6px;font-size:12.5px;color:var(--muted)">Catalog release <b id="foot-release">v1.5</b> (October 2026) · papers 21,014 · datasets 2,289 (2,204 verified)</div></footer>
+
+<!-- ============ Record detail ============ -->
+<div id="modal" class="modal hidden">
+  <div class="modalbox">
+    <div class="modalhead"><h3 id="modal-title"></h3><button onclick="closeModal()">x</button></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="/record-modal.js?v=1"></script>
+<script src="/app.js?v=58"></script>
+</body>
+</html>

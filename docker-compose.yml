@@ -1,0 +1,65 @@
+# BioAgentDB —— docker compose 一键起（app + UI；矿机按 profile 可选）
+#   起服务：      docker compose up -d --build
+#   起服务+挖掘： docker compose --profile mining up -d --build
+#   看日志：      docker compose logs -f app
+#   停止：        docker compose down
+#
+# 代码以卷映射（./:/app），改代码/改 .env 后重启容器即生效，无需重建镜像。
+
+services:
+  app:
+    build: .
+    image: bioagentdb:latest
+    container_name: bioagentdb
+    env_file:
+      - path: .env
+        required: false      # 缺少 .env 也能起（浏览模式；聊天/挖掘需 DEEPSEEK_API_KEY）
+    environment:
+      BIOAGENTDB_HOST: 0.0.0.0
+      BIOAGENTDB_PORT: "8000"
+      BIOAGENTDB_DATA_DIR: /app/data
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  miner:
+    image: bioagentdb:latest
+    build: .
+    container_name: bioagentdb-miner
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BIOAGENTDB_DATA_DIR: /app/data
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/supervisor.py", "--limit", "100", "--workers", "6", "--continuous", "--rounds", "20"]
+    healthcheck:
+      disable: true            # 矿机不提供 HTTP；镜像自带健康检查不适用
+    depends_on:
+      - app
+    restart: unless-stopped
+    profiles: ["mining"]
+
+  # 用户矿机任务的常驻调度器（L-0209；与内部预热矿机 supervisor 并存）
+  scheduler:
+    image: bioagentdb:latest
+    build: .
+    container_name: bioagentdb-scheduler
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BIOAGENTDB_DATA_DIR: /app/data
+    volumes:
+      - ./:/app
+    command: ["python", "scripts/scheduler.py"]
+    healthcheck:
+      disable: true            # 调度器不提供 HTTP；镜像自带健康检查不适用
+    depends_on:
+      - app
+    restart: unless-stopped
+    profiles: ["mining"]

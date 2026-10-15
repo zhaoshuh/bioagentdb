@@ -1,0 +1,13 @@
+{
+  "name": "structure_v2",
+  "template": "You are a biomedical data curator. Candidate dataset identifiers found\nverbatim in a paper are listed below. This extraction serves the research topic:\n{topic}\n\nFor EACH identifier that is a dataset produced or released by THIS paper, output one JSON record.\n\nIdentifiers: {identifiers}\n\nPaper title: {title}\nAbstract: {abstract}\nData Availability: {da_text}\n\nReturn ONLY a JSON object: {{\"records\": [ ... ]}} where each record has EXACTLY these keys:\n\"identifier\" (verbatim), \"title\", \"description\" (text-grounded; \"\" if unsupported),\n\"modality\" (one of {modalities}), \"organism\" (\"\" if unstated), \"tissue\" (\"\" if unstated),\n\"disease\" (the disease studied in the paper; \"\" if none/unstated), \"platform\" (\"\" if unstated),\n\"sample_count\" (integer, 0 if unknown), \"role\" (\"primary\"|\"reuse\"),\n\"on_request_only\" (true/false), \"relevant\" (true iff the dataset relates to the research topic \"{topic}\").\n\nHard rules: output valid JSON only (no prose, no markdown); never invent identifiers; fill as\nmany fields as the text supports; include EVERY listed identifier you can justify.",
+  "metrics": {
+    "papers": 24,
+    "valid_json": 24,
+    "valid_rate": 1.0,
+    "record_ratio": 0.5909,
+    "completeness": 0.6474
+  },
+  "source": "auto",
+  "added_at": "2026-10-13T00:00:00+00:00"
+}

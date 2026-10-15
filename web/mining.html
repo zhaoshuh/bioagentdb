@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BioAgentDB — My mining</title>
+<link rel="stylesheet" href="/styles.css?v=47"/>
+<link rel="stylesheet" href="/workbench.css?v=7"/>
+<style>
+  body { margin: 0; }
+  .mn-wrap { max-width: 1180px; margin: 0 auto; padding: 18px 20px 70px; }
+  .mn-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .mn-head h1 { font-size: 22px; margin: 10px 0 2px; color: #0f766e; }
+  .mn-sub { color: #64748b; font-size: 13.5px; margin: 0 0 14px; max-width: 860px; }
+  .mn-cols { display: grid; grid-template-columns: 350px 1fr; gap: 16px; }
+  @media (max-width: 920px) { .mn-cols { grid-template-columns: 1fr; } }
+  .mn-list { display: flex; flex-direction: column; gap: 10px; }
+  .mn-card { border: 1px solid #e3eae6; border-radius: 10px; padding: 10px 12px; cursor: pointer; background: #fff; }
+  .mn-card.active { border-color: #0f766e; box-shadow: 0 0 0 2px #cfe4dd inset; }
+  .mn-card .t { font-weight: 700; font-size: 14px; color: #111827; }
+  .mn-card .s { font-size: 12.5px; color: #64748b; margin-top: 3px; }
+  .pill { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; margin-right: 6px; }
+  .pill.running { background: #d3e7e1; color: #0f766e; }
+  .pill.idle { background: #eef2f0; color: #475569; }
+  .pill.paused { background: #fdf6e3; color: #a16207; }
+  .pill.stopped, .pill.error { background: #fdecec; color: #b91c1c; }
+  .pill.queued, .pill.done { background: #eef4ff; color: #1d4ed8; }
+  .mn-panel { border: 1px solid #e3eae6; border-radius: 12px; background: #fff; padding: 14px 16px; min-height: 320px; }
+  .mn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .mn-btn { font-size: 13px; padding: 5px 12px; border-radius: 8px; border: 1px solid #cfe4dd; background: #fff; color: #0f766e; cursor: pointer; text-decoration: none; display: inline-block; }
+  .mn-btn.primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+  .mn-btn:disabled { opacity: .45; cursor: default; }
+  .mn-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #334155; margin: 8px 0; }
+  .mn-stats b { color: #0f766e; }
+  .mn-rec { border: 1px solid #eef2f0; border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 13px; }
+  .mn-rec .q { color: #475569; font-size: 12.5px; margin-top: 4px; font-style: italic; }
+  .mn-empty { color: #94a3b8; font-size: 14px; }
+  .badge { font-size: 11px; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+  .badge.verified { background: #d3e7e1; color: #0f766e; }
+  .badge.paper_verified { background: #eef2f0; color: #475569; }
+  .badge.rejected { background: #fdecec; color: #b91c1c; }
+  .mn-topics { border: 1px solid #e3eae6; border-radius: 12px; background: #fff; padding: 12px 16px; margin: 12px 0 16px; }
+  .mn-topics h2 { font-size: 15px; margin: 0 0 4px; color: #0f766e; }
+  .mn-topic { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid #f1f5f3; font-size: 13px; }
+  .mn-topic .n { font-weight: 600; color: #111827; }
+  .mn-topic .k { color: #64748b; font-size: 12px; }
+  .mn-topic .b { margin-left: auto; display: flex; gap: 6px; }
+  .mn-topic input.mn-rename { flex: 1; padding: 4px 8px; border: 1px solid #cfe4dd; border-radius: 6px; font: inherit; }
+  .badge.hidden { background: #fdf6e3; color: #a16207; }
+</style>
+</head>
+<body>
+<header class="wb-top">
+  <a class="wb-brand" href="/">BioAgentDB</a>
+  <nav class="wb-nav">
+    <a href="/#diseases">Topics</a>
+    <a href="/#how">Method</a>
+    <a href="/#ledger">Records</a>
+    <a href="/workbench.html">Ask the agent</a>
+    <a class="active" href="/mining.html">My mining</a>
+    <a href="/guide.html">Guide</a>
+  </nav>
+  <span class="wb-live">long-running mining tasks &middot; records published to the catalog</span>
+</header>
+<main class="mn-wrap">
+  <div class="mn-head">
+    <h1>My mining</h1>
+  </div>
+  <p class="mn-sub">Talk to the agent (home page or workbench &rarr; <b>Ming</b>), confirm a mining
+    task, and it keeps running in the background: first until the literature is exhausted, then a
+    patrol. Verified dataset records are <b>published to the public catalog</b> and also tracked
+    here for your task (exportable; set <code>mining_task_publish_records=0</code> for a
+    private-only mode).</p>
+  <div class="wb-modes">
+    <button id="mn-mode-tasks" class="wb-mode active" data-mode="tasks">Tasks</button>
+    <button id="mn-mode-topics" class="wb-mode" data-mode="topics">Topics</button>
+  </div>
+  <div id="mn-tasks-pane">
+    <p class="mn-sub" id="mn-hint"></p>
+    <div class="mn-cols">
+      <section class="mn-list" id="mn-list"><div class="mn-empty">Loading…</div></section>
+      <section class="mn-panel" id="mn-panel">
+        <div class="mn-empty">Select a task to see its progress and records.</div>
+      </section>
+    </div>
+  </div>
+  <div id="mn-topics-pane" class="wb-hidden">
+    <section class="mn-topics" id="mn-topics"></section>
+  </div>
+</main>
+<script src="/mining.js?v=3"></script>
+</body>
+</html>
