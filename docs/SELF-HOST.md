@@ -77,7 +77,7 @@ python scripts/cli.py serve          # http://127.0.0.1:8000
 **Release snapshot (paper-aligned browsing):**
 
 ```bash
-# 1) place the downloaded DB at data/releases/_v15/bioagentdb.sqlite3, then either
+# 1) place the downloaded DB at data/releases/_v15/bioagentdb.sqlite3 (Zenodo: 10.5281/zenodo.23390867), then either
 python deploy/bootstrap.py --tier release         # copies it (WAL-safe VACUUM INTO) to deploy/release-data/
 docker compose -f deploy/compose.preview.yml up -d
 #    → release stack on http://127.0.0.1:8083 (empty on 8081, live on 8082)
