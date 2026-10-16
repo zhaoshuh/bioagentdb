@@ -37,6 +37,13 @@ REQUIRED_ANY = [  # at least one of each group must appear
 STALE = [
     "substring containment (T1)",
     "tightening the boundary measures",
+    "Gate v2:",
+    "post-release",
+    "upgraded after the release",
+    "have since",
+    "over the release cycle",
+    "earlier release",
+    "historical pipeline",
 ]
 
 
@@ -91,7 +98,11 @@ def main() -> None:
     checks.append({"name": "number_sources_spot", "ok": not spot_bad, "bad": spot_bad})
 
     ok = all(c["ok"] for c in checks)
-    report = {"manuscript": str(md_path.relative_to(ROOT)), "ok": ok, "checks": checks}
+    try:
+        rel = str(md_path.relative_to(ROOT))
+    except ValueError:
+        rel = str(md_path)
+    report = {"manuscript": rel, "ok": ok, "checks": checks}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     for c in checks:

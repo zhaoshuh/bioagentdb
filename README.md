@@ -10,7 +10,7 @@ verification outcome.
   Parkinson's, and on-demand themes (FTD, Huntington's, prion/CJD, PSP, DLB, MSA, …).
 - **Deterministic engine**: a content-addressed LLM cache avoids repeated model calls.
 - **Archived & citable**: the code snapshot is archived on Zenodo
-  ([10.5281/zenodo.23391897](https://doi.org/10.5281/zenodo.23391897)); the released catalog
+  ([10.5281/zenodo.23417034](https://doi.org/10.5281/zenodo.23417034)); the released catalog
   (v1.6) and the evaluation materials are archived separately — see
   [`docs/versions/`](docs/versions/) for version statistics v0.9–v1.6.
 - **Paper-driven**: records come from papers only; repositories are treated as where

@@ -36,7 +36,7 @@ DATE = "2026-10-16"
 ROOT_FILES = ["README.md", "requirements.txt", "environment.yml", "Dockerfile",
               "docker-compose.yml", "start.sh", "start.ps1", ".env.example",
               ".gitignore", ".dockerignore"]
-DOCS_FILES = ["QUICKSTART.md", "SELF-HOST.md", "CONFIG.md"]
+DOCS_FILES = ["QUICKSTART.md", "SELF-HOST.md", "CONFIG.md", "NOACC-REVIEW.md"]
 TREES = ["app", "web", "learned", "config"]
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".git", "*.log")
 
@@ -176,7 +176,7 @@ def build_github(out: Path) -> Path:
         copy(ROOT / "deploy" / name, dep / name)
     n_scripts = 0
     for f in sorted((ROOT / "scripts").glob("*.py")):
-        if f.name.startswith("_"):
+        if f.name.startswith("_") and f.name not in {"_content_audit.py"}:
             continue
         copy(f, gh / "scripts" / f.name)
         n_scripts += 1
@@ -210,6 +210,7 @@ def build_zenodo(out: Path, gh: Path) -> None:
     # record 2: release snapshot + stats + schema + README
     r2 = z / "record2-release"
     r2.mkdir(parents=True, exist_ok=True)
+    (r2 / "record2-release.zip").unlink(missing_ok=True)  # never re-zip a moved-in archive
     need(V16)
     copy(V16, r2 / "bioagentdb.sqlite3")
     copy(ROOT / "docs" / "versions", r2 / "versions")
@@ -292,6 +293,41 @@ def make_upload_zips(out: Path, z: Path) -> None:
     tar_src = z / "record1-code" / f"bioagentdb-v{VERSION_FULL}.tar.gz"
     if tar_src.exists():
         shutil.copy2(tar_src, up / "record1-code.tar.gz")
+    # split oversized zips for reliable upload (Zenodo accepts multiple files;
+    # e.g. record2-release.zip ~24 MB -> 6 x ~4 MB parts). The joined zip moves to
+    # the zenodo/ tree and the upload side gets parts + sums + a join note.
+    SPLIT_THRESHOLD = 8_000_000
+    SPLIT_CHUNK = 4_006_816
+    for zp in sorted(up.glob("*.zip")):
+        if zp.stat().st_size <= SPLIT_THRESHOLD:
+            continue
+        data = zp.read_bytes()
+        n = max(1, (len(data) + SPLIT_CHUNK - 1) // SPLIT_CHUNK)
+        base = (len(data) + n - 1) // n
+        part_rows = []
+        for i in range(n):
+            chunk = data[i * base:(i + 1) * base]
+            pth = up / f"{zp.name}.{i + 1:03d}"
+            pth.write_bytes(chunk)
+            part_rows.append(f"{hashlib.sha256(chunk).hexdigest()}  {pth.name}")
+        full = hashlib.sha256(data).hexdigest()
+        stem = zp.stem
+        (up / f"{stem}-SHA256SUMS.txt").write_text(
+            f"# {stem} (upload set) — sha256\n" + "\n".join(part_rows)
+            + f"\n{full}  {zp.name}   (joined from parts .001-.{n:03d}, in order)\n",
+            encoding="utf-8")
+        note = (f"# NOTE — this record is uploaded split into {n} parts\n\n"
+                f"Files `{zp.name}.001` … `{zp.name}.{n:03d}` are consecutive parts of\n"
+                f"`{zp.name}`. Join them in order and verify sha256 `{full}` before unzipping\n"
+                f"(Windows: copy /b; Linux/macOS: cat; see {stem}-SHA256SUMS.txt).\n\n---\n\n")
+        loose_readme = up / f"{stem}-README.md"
+        if loose_readme.exists():
+            t = loose_readme.read_text(encoding="utf-8")
+            if "uploaded split into" not in t:
+                loose_readme.write_text(note + t, encoding="utf-8")
+        else:
+            (up / f"{stem}-JOIN-NOTE.md").write_text(note, encoding="utf-8")
+        zp.replace(out / "zenodo" / stem / zp.name)   # keep the joined zip in zenodo/
     print(f"  upload/: {sum(1 for _ in up.iterdir())} files ready to upload")
     for f in sorted(up.iterdir()):
         print(f"    {f.name}  {f.stat().st_size} B")
@@ -315,7 +351,7 @@ Reproduce (read-only)
 ```python
 import sqlite3
 con = sqlite3.connect("file:bioagentdb.sqlite3?mode=ro", uri=True)
-print(con.execute("SELECT COUNT(*), SUM(verified) FROM datasets").fetchone())
+print(con.execute("SELECT status, COUNT(*) FROM datasets GROUP BY status").fetchall())
 ```
 
 License: the catalog metadata in this snapshot is released under CC BY 4.0.
@@ -349,13 +385,15 @@ UPLOAD_GUIDE = """# Upload guide (staging) — prepared {date}
 - **Title**: BioAgentDB v{VERSION_FULL} — code archive (adversarial, machine-verified literature-mining pipeline)
 - **Files**: `record1-code.tar.gz` — adds the v2 verification gates (`t1_v2` slot rule with
   normalization tiers; `t2_v2` three-valued link resolution with soft-404 / anti-bot sniffing
-  and bounded retries), the frozen fixture set (54 + 54) and the re-verification drivers.
+  and bounded retries) and the re-verification drivers; the frozen fixture set (54 + 54 cases) ships with the evaluation materials (record 3).
 
 ### Record 2 — release catalog snapshot
 - **Title**: BioAgentDB v{VERSION_FULL} — frozen release catalog of announced multi-omics datasets
 - **Files**: `record2-release.zip` + loose README/SHA256SUMS — the frozen v1.6 snapshot (the
   catalog is unchanged from v1.5: 2,289 records from 21,014 papers) plus `t2v2_checks`, the
   3,526-row 2026-10 re-verification telemetry, and statistics for v0.9-v{VERSION}.
+  (For reliable upload the zip ships **split into ~4 MB parts** — `record2-release.zip.001` …
+  join them in order per the README before unzipping.)
 
 ### Record 3 — evaluation materials
 - **Title**: BioAgentDB — evaluation materials (human annotation, baselines, ablations, audits, gate-v2 evidence)
@@ -369,7 +407,7 @@ UPLOAD_GUIDE = """# Upload guide (staging) — prepared {date}
 
 ## 3 · After uploading — send back
 
-- GitHub release URL; the four new-version DOIs (concept DOIs are unchanged).
+- GitHub release URL; the new-version DOIs for records 1-3 (concept DOIs; record 4 follows after the e-series freeze).
 
 The controller then re-runs the release checks and prepares the final submission package.
 """

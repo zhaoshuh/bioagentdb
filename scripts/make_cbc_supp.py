@@ -43,7 +43,8 @@ def main() -> None:
 
     import markdown
 
-    tables_md = (FINAL / "tables.md").read_text(encoding="utf-8")
+    tables_v16 = CBC / "v2" / "tables-v1.6.md"
+    tables_md = (tables_v16 if tables_v16.exists() else FINAL / "tables.md").read_text(encoding="utf-8")
     # journal-facing sanitisation: no maintainer notes / process words in the
     # supplementary PDF (the on-disk tables.md keeps them for the project record)
     tables_md = re.sub(r"\s*\(S1 is hand-ported;\s*see `?TABLES-NOTES\.md`?\)", "", tables_md)

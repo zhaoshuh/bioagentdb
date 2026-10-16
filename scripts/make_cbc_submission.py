@@ -35,7 +35,9 @@ SUB = CBC / "submission"
 FIN = ROOT / "docs" / "paper" / "final" / "figures"
 EVID = ROOT / "docs" / "paper" / "final" / "evidence"
 HIRES = CBC / "figures-hires"
-CAPS = ROOT / "docs" / "paper" / "final" / "captions.md"
+CAPS = ROOT / "docs" / "paper" / "cbc" / "v2" / "captions-v1.6.md"
+if not CAPS.exists():
+    CAPS = ROOT / "docs" / "paper" / "final" / "captions.md"
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 TOP = [("cbc-paper.pdf", "BioAgentDB-manuscript.pdf", CBC),

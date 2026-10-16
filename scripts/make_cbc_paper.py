@@ -201,4 +201,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import os
+    if not os.environ.get("BIOAGENTDB_ALLOW_CBC_PAPER"):
+        raise SystemExit(
+            "make_cbc_paper.py is RETIRED (L-0348 D2'): the CBC manuscript is edited "
+            "directly (docs/paper/cbc/cbc-paper.md); running this script would OVERWRITE it "
+            "from final/paper.md + overrides. Set BIOAGENTDB_ALLOW_CBC_PAPER=1 to force.")
     main()

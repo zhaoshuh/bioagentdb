@@ -31,8 +31,7 @@ python deploy/bootstrap.py --check            # 对 8081/8082/8083 做 /api/heal
 
 ## 网络（代理）
 
-容器内无法访问主机 `127.0.0.1` 的代理（本机 mihomo:9674），compose 默认统一走 Docker Desktop
-内网出口 `http://http.docker.internal:3128`。**第三方/直连网络**二选一（不改机器默认）：
+容器内无法访问主机 `127.0.0.1` 的代理；compose **默认直连**（`BIOAGENTDB_CONTAINER_PROXY` 留空）。如需让容器走主机上的代理：
 
 ```bash
 # bash/zsh
@@ -43,7 +42,7 @@ export BIOAGENTDB_CONTAINER_PROXY=
 # BIOAGENTDB_CONTAINER_PROXY=http://host.docker.internal:7890
 ```
 
-（都不设置时保持原默认 `http://http.docker.internal:3128`，本机行为不变。）
+（空值 = 直连；需要代理时填 `http://host.docker.internal:<端口>`。旧版曾默认 `http.docker.internal:3128`，该默认已取消——L-0381。）
 
 ## live 档：自备现库快照（可选）
 

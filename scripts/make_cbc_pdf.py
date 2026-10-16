@@ -64,7 +64,8 @@ ol.references li { margin-bottom: 3pt; text-align: left; }
 
 
 def build_captions() -> tuple[dict, dict]:
-    text = (FINAL / "captions.md").read_text(encoding="utf-8")
+    caps_v16 = CBC / "v2" / "captions-v1.6.md"
+    text = (caps_v16 if caps_v16.exists() else FINAL / "captions.md").read_text(encoding="utf-8")
     caps: dict = {}
     supp: dict = {}
     for m in re.finditer(r"^##\s+(.+?)\s*$\n(.*?)(?=^##\s|\Z)", text, re.S | re.M):
