@@ -5,8 +5,8 @@ repository and the frozen release database (schema dump via sqlite uri=ro).
 
 Outputs:
   github/                        net export for the public repository (single-commit upload)
-  zenodo/record1-code/           bioagentdb-v1.5.0.tar.gz (tar of github/)
-  zenodo/record2-release/        v1.5 sqlite snapshot + v0.9-v1.5 stats + schema + README + SHA256SUMS
+  zenodo/record1-code/           bioagentdb-v1.6.0.tar.gz (tar of github/)
+  zenodo/record2-release/        v1.6 sqlite snapshot + v0.9-v1.6 stats + schema + README + SHA256SUMS
   zenodo/record3-evaluation/     gold + eval materials (*.log excluded) + SHA256SUMS
   zenodo/record4-paper-sources/  manuscript sources + figures + evidence + SHA256SUMS
   SANITIZE-REPORT.md             hard/soft secret scan (hard target 0) + exclusion notes
@@ -27,7 +27,11 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-V15 = ROOT / "data" / "releases" / "_v15" / "bioagentdb.sqlite3"
+V15 = ROOT / "data" / "releases" / "_v15" / "bioagentdb.sqlite3"  # legacy ref (not shipped)
+V16 = ROOT / "data" / "releases" / "_v16" / "bioagentdb.sqlite3"
+VERSION = "1.6"
+VERSION_FULL = "1.6.0"
+DATE = "2026-10-16"
 
 ROOT_FILES = ["README.md", "requirements.txt", "environment.yml", "Dockerfile",
               "docker-compose.yml", "start.sh", "start.ps1", ".env.example",
@@ -73,8 +77,8 @@ keywords:
   - large language models
 authors:
   - name: "BioAgentDB project (maintainer: GitHub @zhaoshuh)"
-version: "1.5.0"
-date-released: "2026-10-15"
+version: "1.6.0"
+date-released: "2026-10-16"
 """
 
 HARD_PATTERNS = [
@@ -197,19 +201,19 @@ def build_zenodo(out: Path, gh: Path) -> None:
     # record 1: code tar
     r1 = z / "record1-code"
     r1.mkdir(parents=True, exist_ok=True)
-    tarp = r1 / "bioagentdb-v1.5.0.tar.gz"
+    tarp = r1 / f"bioagentdb-v{VERSION_FULL}.tar.gz"
     with tarfile.open(tarp, "w:gz") as tf:
-        tf.add(gh, arcname="bioagentdb-v1.5.0")
+        tf.add(gh, arcname=f"bioagentdb-v{VERSION_FULL}")
     write_checksums(r1)
     print(f"  zenodo/record1-code/: {tarp.name} {tarp.stat().st_size} B")
 
     # record 2: release snapshot + stats + schema + README
     r2 = z / "record2-release"
     r2.mkdir(parents=True, exist_ok=True)
-    need(V15)
-    copy(V15, r2 / "bioagentdb.sqlite3")
+    need(V16)
+    copy(V16, r2 / "bioagentdb.sqlite3")
     copy(ROOT / "docs" / "versions", r2 / "versions")
-    con = sqlite3.connect(f"file:{V15.as_posix()}?mode=ro", uri=True)
+    con = sqlite3.connect(f"file:{V16.as_posix()}?mode=ro", uri=True)
     ddl = [r[0] for r in con.execute(
         "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name")]
     counts = {}
@@ -220,15 +224,28 @@ def build_zenodo(out: Path, gh: Path) -> None:
     (r2 / "schema.sql").write_text("\n\n".join(ddl) + "\n", encoding="utf-8")
     (r2 / "table-counts.txt").write_text(
         "\n".join(f"{k}\t{v}" for k, v in counts.items()) + "\n", encoding="utf-8")
-    (r2 / "README.md").write_text(RECORD2_README, encoding="utf-8")
+    h = sha256(V16)
+    (r2 / "README.md").write_text(
+        RECORD2_README.format(version=VERSION, hash=f"{h[:8]}…{h[-5:]}".upper()),
+        encoding="utf-8")
     write_checksums(r2)
-    print(f"  zenodo/record2-release/: sqlite {V15.stat().st_size} B, sha16 {sha16(V15)}")
+    print(f"  zenodo/record2-release/: sqlite {V16.stat().st_size} B, sha16 {sha16(V16)}")
 
     # record 3: evaluation materials (no *.log)
     r3 = z / "record3-evaluation"
     r3.mkdir(parents=True, exist_ok=True)
     copy(ROOT / "data" / "gold", r3 / "gold")
     copy(ROOT / "data" / "eval", r3 / "eval")
+    v2 = ROOT / "docs" / "paper" / "cbc" / "v2"
+    for rel in ("gates-gold", "checks"):
+        if (v2 / rel).exists():
+            copy(v2 / rel, r3 / "v2" / rel)
+    for name in ("p4-report.md", "delta-report.md", "delta-flip-audit.md",
+                 "t2-mapping.md", "t2v2_checks.sql", "NUMBER-SOURCES-v1.6.md",
+                 "NUMBER-SOURCES-v1.6.json", "t2-recheck.jsonl"):
+        srcv = v2 / name
+        if srcv.exists():
+            copy(srcv, r3 / "v2" / name)
     write_checksums(r3)
     n3 = sum(1 for f in r3.rglob("*") if f.is_file())
     print(f"  zenodo/record3-evaluation/: {n3} files")
@@ -237,10 +254,15 @@ def build_zenodo(out: Path, gh: Path) -> None:
     r4 = z / "record4-paper-sources"
     r4.mkdir(parents=True, exist_ok=True)
     fin = ROOT / "docs" / "paper" / "final"
-    for name in ("paper.md", "paper.pdf", "captions.md", "tables.md", "references.md"):
-        src = fin / name
+    cbc = ROOT / "docs" / "paper" / "cbc"
+    for src, dst in ((cbc / "cbc-paper.md", "manuscript.md"),
+                     (cbc / "cbc-paper.pdf", "manuscript.pdf"),
+                     (cbc / "v2" / "captions-v1.6.md", "captions.md"),
+                     (cbc / "v2" / "tables-v1.6.md", "tables.md"),
+                     (cbc / "overrides.md", "overrides.md"),
+                     (fin / "references.md", "references.md")):
         if src.exists():
-            copy(src, r4 / name)
+            copy(src, r4 / dst)
     for tree in ("figures", "evidence"):
         if (fin / tree).exists():
             copy(fin / tree, r4 / tree)
@@ -267,7 +289,7 @@ def make_upload_zips(out: Path, z: Path) -> None:
             p = src / extra
             if p.exists():
                 shutil.copy2(p, up / f"{name}-{extra}")
-    tar_src = z / "record1-code" / "bioagentdb-v1.5.0.tar.gz"
+    tar_src = z / "record1-code" / f"bioagentdb-v{VERSION_FULL}.tar.gz"
     if tar_src.exists():
         shutil.copy2(tar_src, up / "record1-code.tar.gz")
     print(f"  upload/: {sum(1 for _ in up.iterdir())} files ready to upload")
@@ -275,17 +297,19 @@ def make_upload_zips(out: Path, z: Path) -> None:
         print(f"    {f.name}  {f.stat().st_size} B")
 
 
-RECORD2_README = """# BioAgentDB v1.5 — release catalog snapshot (frozen)
+RECORD2_README = """# BioAgentDB v{version} — release catalog snapshot (frozen)
 
 Contents
-- `bioagentdb.sqlite3` — the frozen v1.5 release database (catalog metadata only:
+- `bioagentdb.sqlite3` — the frozen v{version} release database (catalog metadata only:
   dataset records, papers, evidence quotes, links, statuses; no experimental data).
+  v1.6 additionally carries `t2v2_checks`: the per-link rows of the 2026-10
+  re-verification wave under the v2 link gate (status, reason, signal, carry-forward flag).
 - `schema.sql`, `table-counts.txt` — schema and per-table row counts.
-- `versions/` — archived statistics for v0.9 through v1.5 (project history).
+- `versions/` — archived statistics for v0.9 through v{version} (project history).
 
 Integrity
 - The database sha256 is listed in `SHA256SUMS.txt`. The article reports the
-  snapshot hash prefix `9B55F8B8…C299E`.
+  snapshot hash prefix `{hash}`.
 
 Reproduce (read-only)
 ```python
@@ -298,80 +322,56 @@ License: the catalog metadata in this snapshot is released under CC BY 4.0.
 The software is released under the MIT license (see the code archive record).
 """
 
+
 UPLOAD_GUIDE = """# Upload guide (staging) — prepared {date}
 
 > Everything below was assembled by `scripts/make_release_staging.py` on top of
 > commit `{commit}`. Verify `SHA256SUMS.txt` before uploading. Uploaded BY THE
 > USER; the controller only prepares packages (L-0325).
 
-## 0 · Before uploading (author placeholders)
+## 0 · Before uploading
 
-- [ ] Real author names/affiliations → will be filled into the manuscript at
-      submission; also replace the placeholder author in `github/CITATION.cff`,
-      `github/LICENSE` if desired.
-- [ ] Optional (recommended): rotate the LLM provider key that was used during
-      development (the old hard-coded value was removed in the portability pass;
-      `scripts/_probe_sources.py` now reads the environment).
+- [ ] Skim the record descriptions below; they are ready to paste as new versions.
 
-## 1 · GitHub (public repo `zhaoshuh/bioagentdb`)
+## 1 · GitHub (public repo `zhaoshuh/bioagentdb` — already exists)
 
-1. Create a new public repository `zhaoshuh/bioagentdb` (no README/license file
-   — they are in the package).
-2. Upload the **contents** of `github/` as a single commit
-   (web UI "Add file → Upload files", or `git init && git add -A && git commit`
-   in a local copy of `github/`).
-3. Recommended: create a GitHub **release** `v1.5.0` from that commit (Zenodo
-   can mint the code DOI automatically if the repository is linked; otherwise
-   upload `zenodo/record1-code/` manually).
+1. Push the **contents** of `github/` as a single new commit to the existing
+   repository (web UI "Upload files", or a local `git init && git add -A &&
+   git commit` + force-push per your access method).
+2. Create the GitHub **release** `v{VERSION_FULL}` from that commit.
 
-## 2 · Zenodo records (create 2-4 records; paste the metadata below)
+## 2 · Zenodo (upload NEW VERSIONS of the existing records)
 
-> **Zenodo accepts files, not folders.** Upload the ready-to-go files from
-> `upload/`: the zips below (one per record) plus the code tar. The loose
-> `*-README.md` / `*-SHA256SUMS.txt` files travel alongside their zip so the
-> record page can display them directly.
+> **Zenodo takes files, not folders.** On each existing record page choose
+> "New version", then upload the ready-to-go file(s) from `upload/`.
 
-### Record A — code archive  (or link the GitHub release)
-- **Title**: BioAgentDB v1.5.0 — code archive (adversarial, machine-verified literature-mining pipeline)
-- **Description**: Source code and deployment files for BioAgentDB, the pipeline that mines
-  published papers for announced multi-omics datasets and admits a record only when the
-  accession is grounded in the announcing sentence and the link is checked. Includes the
-  deterministic paper-build chain and a self-hosting quickstart.
-- **Keywords**: bioinformatics; literature mining; large language models; data curation
-- **License**: MIT
-- **Files**: `upload/record1-code.tar.gz`
+### Record 1 — code archive  (or link the GitHub release)
+- **Title**: BioAgentDB v{VERSION_FULL} — code archive (adversarial, machine-verified literature-mining pipeline)
+- **Files**: `record1-code.tar.gz` — adds the v2 verification gates (`t1_v2` slot rule with
+  normalization tiers; `t2_v2` three-valued link resolution with soft-404 / anti-bot sniffing
+  and bounded retries), the frozen fixture set (54 + 54) and the re-verification drivers.
 
-### Record B — release catalog snapshot
-- **Title**: BioAgentDB v1.5 — frozen release catalog of announced multi-omics datasets
-- **Description**: The frozen v1.5 release database (2,289 paper-grounded dataset records
-  from 21,014 papers; metadata, verbatim evidence quotes and checked links only — never the
-  data itself), with schema, per-table counts and archived statistics for v0.9-v1.5.
-- **Keywords**: multi-omics datasets; data availability; metadata catalog; machine verification
-- **License**: CC BY 4.0 (metadata)
-- **Files**: `upload/record2-release.zip` + `record2-release-README.md` + `record2-release-SHA256SUMS.txt`
+### Record 2 — release catalog snapshot
+- **Title**: BioAgentDB v{VERSION_FULL} — frozen release catalog of announced multi-omics datasets
+- **Files**: `record2-release.zip` + loose README/SHA256SUMS — the frozen v1.6 snapshot (the
+  catalog is unchanged from v1.5: 2,289 records from 21,014 papers) plus `t2v2_checks`, the
+  3,526-row 2026-10 re-verification telemetry, and statistics for v0.9-v{VERSION}.
 
-### Record C — evaluation materials
-- **Title**: BioAgentDB — evaluation materials (human annotation, baselines, ablations, audits)
-- **Description**: The 250-paper human annotation, LLM/RAG baseline predictions and reports,
-  ablation and self-improvement evaluations, reviewer statistics, the refusal-audit sheet
-  (CSV) and downstream question-set materials, as referenced by the article's evaluation
-  protocol (sections 6.1-6.11).
-- **Keywords**: evaluation; reproducibility; benchmarking; annotation
-- **License**: CC BY 4.0
-- **Files**: `upload/record3-evaluation.zip` + `record3-evaluation-SHA256SUMS.txt`
+### Record 3 — evaluation materials
+- **Title**: BioAgentDB — evaluation materials (human annotation, baselines, ablations, audits, gate-v2 evidence)
+- **Files**: `record3-evaluation.zip` + SHA256SUMS — the 250-paper annotation and reports,
+  **plus the gate-v2 evidence subset** (`v2/`: frozen fixtures, self-test reports, the
+  2026-10 per-link re-check rows and the delta / P4 reports).
 
-### Record D — paper sources (optional)
-- **Title**: BioAgentDB — manuscript sources (figures, captions, tables, evidence captures)
-- **Files**: `upload/record4-paper-sources.zip` + `record4-paper-sources-SHA256SUMS.txt`
+### Record 4 — paper sources  → uploaded LATER (after the e-series freeze, P10)
+- The staging tree builds `record4-paper-sources/` for completeness; upload it as a new
+  version only when the controller confirms (post-e2).
 
-## 3 · After uploading — send back to the project
+## 3 · After uploading — send back
 
-- GitHub repository URL
-- Zenodo DOIs (code / release / evaluation [+ paper sources])
+- GitHub release URL; the four new-version DOIs (concept DOIs are unchanged).
 
-The controller will then run the backfill round (8 placeholder points in the
-manuscript, plus the planned "code and" scope fix), re-run the release checks and
-prepare the final submission package.
+The controller then re-runs the release checks and prepares the final submission package.
 """
 
 
@@ -400,13 +400,15 @@ def main() -> None:
     except Exception:
         commit = "unknown"
 
+    v16h = sha256(V16) if V16.exists() else ""
     (out / "SANITIZE-REPORT.md").write_text(SANITIZE_TEMPLATE.format(
-        date="2026-10-15", commit=commit, hard_count=len(hard),
+        date=DATE, commit=commit, hard_count=len(hard),
         hard=("\n".join(f"- `{h}`" for h in hard) or "- (none)"),
         soft=("\n".join(f"- `{s}`" for s in soft) or "- (none)"),
+        v16hash=f"{v16h[:8]}…{v16h[-5:]}".upper() if v16h else "n/a",
     ), encoding="utf-8")
     (out / "UPLOAD-GUIDE.md").write_text(
-        UPLOAD_GUIDE.format(date="2026-10-15", commit=commit), encoding="utf-8")
+        UPLOAD_GUIDE.format(date=DATE, commit=commit, VERSION_FULL=VERSION_FULL, VERSION=VERSION), encoding="utf-8")
     write_checksums(out)
     print("== done ==")
     print(f"staging root: {out}")
@@ -429,24 +431,19 @@ Soft patterns (api key / password / secret / bearer assignments, reviewed):
 
 - `.env` (never committed; not exported), `deploy/*-data/` runtime volumes
 - `data/{{backups,pilot,scratch,llm_cache,logs,refs,reviews,web_cache,workbench_cache}}`
-- `docs/{{reviews, paper-plan*, expansion, process plans}}`, paper reviews/ledger/SIGNOFF
-- `scripts/_*` one-off probes (364 files); `vendor/omics-discovery` (submodule reference only;
-  upstream license note pending); `tools/cloudflared.exe` (local binary, 55 MB)
+- `docs/{{reviews, paper-plan*, expansion, process plans}}`, `docs/paper/cbc/v2/reviews/**`,
+  paper reviews/ledger/SIGNOFF
+- `scripts/_*` one-off probes; `vendor/omics-discovery` (submodule reference only);
+  `tools/cloudflared.exe` (local binary)
 - `*.log` anywhere (including evaluation logs)
 
 ## Notes
 
-- The historical hard-coded provider key in `scripts/_probe_sources.py` was removed in the
-  portability pass (now read from the environment). Rotation of the old key remains an
-  optional step for the operator (see UPLOAD-GUIDE §0).
-- Soft hits of the `token=eyJ...` class inside `data/gold/**` are **verbatim quotes from
-  cited papers** (their own tokenized repository links, reproduced exactly as published).
-  They are part of the evidence-quote design and are already present in the released
-  catalog; they are not operator credentials.
-- The frozen v1.5 database was opened read-only for the schema dump; its bytes were copied,
-  never modified (article hash prefix `9B55F8B8…C299E`).
+- Provider keys are read from the environment since the portability pass.
+- Soft hits of the `token=eyJ...` class inside `data/gold/**` are verbatim quotes from
+  cited papers; not operator credentials.
+- The frozen v1.6 database was opened read-only for the schema dump; its bytes were copied,
+  never modified (article hash prefix `{v16hash}`).
 """
-
-
 if __name__ == "__main__":
     main()

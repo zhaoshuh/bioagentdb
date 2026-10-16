@@ -32,6 +32,7 @@ NUM_RE = re.compile(r"\b\d[\d,]*(?:\.\d+)?%?")
 BANNED = [
     "1,187", "1,189", "2,172", "88 rows", "T1/T2-gated", "T2 not passed",
     "46/46", "v1.3", "v1.4", "E5b", "L-0", "NAR",
+    "single annotator", "single-annotator", "AI proxy",
 ]
 
 
@@ -91,7 +92,7 @@ def main() -> None:
     supp_pdf_p = CBC / "cbc-supplementary.pdf"
     supp_html = supp_html_p.read_text(encoding="utf-8") if supp_html_p.exists() else ""
     supp_pdf = norm(pdf_text(supp_pdf_p)) if supp_pdf_p.exists() else ""
-    supp_banned = ["TABLES-NOTES", "hand-ported", "NAR"]
+    supp_banned = ["TABLES-NOTES", "hand-ported", "NAR", "single annotator", "AI proxy"]
     supp_hits = {tok: {"html": supp_html.count(tok), "pdf": supp_pdf.count(tok)}
                  for tok in supp_banned}
     supp_bad = {k: v for k, v in supp_hits.items() if any(v.values())}
@@ -153,9 +154,9 @@ def main() -> None:
                     "detail": {"md_not_html": md_not_html[:15], "md_not_pdf": md_not_pdf[:15]}})
 
     # ---- C7 placeholder inventory (informational; zero required at freeze) ----
-    placeholders = ["[URL]", "[DOI]", "[DOI-CODE]", "[DOI-DATA]",
+    placeholders = ["[URL]", "[DOI]", "[DOI-CODE]", "[DOI-DATA]", "[DOI-EVAL]",
                     "[URL — release instance]", "bioagentdb.example",
-                    "inserted at submission"]
+                    "inserted at submission", "[corresponding email]"]
     pdf_flat = re.sub(r"\s+", "", pdf)          # defeat PDF soft line breaks
     supp_pdf_flat = re.sub(r"\s+", "", supp_pdf)
     inv = {}

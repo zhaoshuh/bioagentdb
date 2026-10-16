@@ -1,0 +1,160 @@
+{
+  "db": "D:\\BioAgentDB\\data\\releases\\_v16\\bioagentdb.sqlite3",
+  "totals": {
+    "papers": 21014,
+    "papers_mined": 19390,
+    "papers_with_data": 1307,
+    "datasets": 2289,
+    "datasets_verified": 2204,
+    "datasets_rejected": 85,
+    "evidence": 3618,
+    "themes": 11
+  },
+  "per_theme": [
+    {
+      "slug": "alzheimers-disease",
+      "name": "Alzheimer's Disease & Related Dementias",
+      "priority": 1,
+      "papers_with_data": 326,
+      "datasets": 544
+    },
+    {
+      "slug": "als",
+      "name": "Amyotrophic Lateral Sclerosis (ALS)",
+      "priority": 2,
+      "papers_with_data": 298,
+      "datasets": 475
+    },
+    {
+      "slug": "parkinsons-disease",
+      "name": "Parkinson's Disease (PD)",
+      "priority": 3,
+      "papers_with_data": 210,
+      "datasets": 374
+    },
+    {
+      "slug": "frontotemporal-dementia",
+      "name": "Frontotemporal Dementia (FTD)",
+      "priority": 4,
+      "papers_with_data": 12,
+      "datasets": 14
+    },
+    {
+      "slug": "huntingtons-disease",
+      "name": "Huntington's Disease (HD)",
+      "priority": 5,
+      "papers_with_data": 10,
+      "datasets": 21
+    },
+    {
+      "slug": "prion-disease",
+      "name": "Prion Disease / Creutzfeldt-Jakob Disease (CJD)",
+      "priority": 6,
+      "papers_with_data": 8,
+      "datasets": 16
+    },
+    {
+      "slug": "progressive-supranuclear-palsy",
+      "name": "Progressive Supranuclear Palsy (PSP)",
+      "priority": 7,
+      "papers_with_data": 8,
+      "datasets": 18
+    },
+    {
+      "slug": "dementia-with-lewy-bodies",
+      "name": "Dementia with Lewy Bodies (DLB)",
+      "priority": 8,
+      "papers_with_data": 4,
+      "datasets": 4
+    },
+    {
+      "slug": "multiple-system-atrophy",
+      "name": "Multiple System Atrophy (MSA)",
+      "priority": 9,
+      "papers_with_data": 7,
+      "datasets": 17
+    },
+    {
+      "slug": "spinocerebellar-ataxia",
+      "name": "Spinocerebellar Ataxia (SCA)",
+      "priority": 10,
+      "papers_with_data": 2,
+      "datasets": 3
+    },
+    {
+      "slug": "breast-cancer",
+      "name": "Breast cancer",
+      "priority": 50,
+      "papers_with_data": 34,
+      "datasets": 77
+    }
+  ],
+  "multi_theme": {
+    "papers_in_multi_theme": 992,
+    "papers_with_data_in_multi_theme": 49
+  },
+  "modalities": {
+    "transcriptomics": 536,
+    "proteomics": 140,
+    "epigenomics": 109,
+    "genomics": 81,
+    "scrna": 71,
+    "snrna": 66,
+    "multi_omics": 46,
+    "spatial_transcriptomics": 36,
+    "microbiome": 23,
+    "metabolomics": 12,
+    "metagenomics": 7,
+    "scatac": 5,
+    "lipidomics": 5,
+    "spatial_proteomics": 4,
+    "phosphoproteomics": 4
+  },
+  "repositories": {
+    "GEO": 855,
+    "Zenodo": 367,
+    "ENA": 213,
+    "PRIDE": 181,
+    "Synapse": 109,
+    "GWASCatalog": 92,
+    "dbGaP": 80,
+    "Figshare": 75,
+    "SRA": 62,
+    "EGA": 61,
+    "Dryad": 30,
+    "MassIVE": 30,
+    "BioStudies": 24,
+    "BioSample": 22,
+    "NGDC-GSA": 18,
+    "ProtocolsIO": 17,
+    "NIAGADS": 16,
+    "PRIDE-DOI": 14,
+    "SingleCellPortal": 8,
+    "MetaboLights": 6,
+    "CNGB": 4,
+    "jPOST": 3,
+    "CELLxGENE": 1,
+    "HCA": 1
+  },
+  "years": {
+    "2026": 701,
+    "2025": 403,
+    "2024": 169,
+    "2023": 28,
+    "2022": 5,
+    "2020": 1
+  },
+  "grounding": {
+    "datasets_with_primary": 3555,
+    "grounded": 3519,
+    "t1_rate": 0.9899
+  },
+  "reachability": {
+    "reachable": 3341,
+    "unknown": 185
+  },
+  "evidence_zones": {
+    "abstract": 313,
+    "data_availability": 3305
+  }
+}

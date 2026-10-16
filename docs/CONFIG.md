@@ -120,8 +120,8 @@
 
 统一口径：**部署/路径/调度全部走环境变量**（`BIOAGENTDB_` + 大写键名；`.env` 由 start 脚本/compose
 读取，也可直接 `export`）。默认值 = 原行为：serve 默认 `127.0.0.1:8000`、数据 `<repo>/data`、
-库 `<data>/bioagentdb.sqlite3`；**论文对齐发布快照固定为 `_v15`**（`data/releases/_v15/`，
-sha256 `9B55F8B8…C299E`，release 档由 `deploy/bootstrap.py` 装载进 `deploy/release-data/`）。
+库 `<data>/bioagentdb.sqlite3`；**论文对齐发布快照固定为 `_v16`**（`data/releases/_v16/`，
+sha256 `15C067D8…94958`，release 档由 `deploy/bootstrap.py` 装载进 `deploy/release-data/`）。
 
 | 用途 | 键（env） | 默认 | 说明 |
 |---|---|---|---|
@@ -136,6 +136,6 @@ sha256 `9B55F8B8…C299E`，release 档由 `deploy/bootstrap.py` 装载进 `depl
 | 预览端口 | `BIOAGENTDB_PREVIEW_PORTS` | 8081,8082,8083 | 仅 `deploy/bootstrap.py --check` 探活用 |
 
 三档预览（`deploy/compose.preview.yml`）：empty=8081 空库（带 scheduler）· live=8082 自备快照 ·
-release=8083 v1.5 冻结对齐。一步准备 + 一键起：`python deploy/bootstrap.py` →
+release=8083 v1.6 冻结对齐。一步准备 + 一键起：`python deploy/bootstrap.py` →
 `docker compose -f deploy/compose.preview.yml up -d`（详见 `deploy/README.md`、`docs/QUICKSTART.md`、
 第三方十步 `docs/SELF-HOST.md`）。

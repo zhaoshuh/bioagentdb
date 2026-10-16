@@ -99,6 +99,42 @@ def build_figure_s2(out_pdf: Path) -> None:
     print(f"  wrote figures/FigureS2.pdf (regenerated, {out_pdf.stat().st_size} B)")
 
 
+def build_figure9(out_pdf: Path) -> None:
+    """Regenerate Figure 9 as a standalone PDF with its caption aligned to the
+    corrected annotation provenance (five annotators); master assets untouched."""
+    panels = [(FIN / f"panel{n}.svg").read_text(encoding="utf-8")
+              for n in (8, 9, 10, 11, 12, 13, 14, 15, 18)]
+    caps = CAPS.read_text(encoding="utf-8")
+    m = re.search(r"^##\s+Figure\s+9\s*·\s*([^\n]+)\n(.*?)(?=^##\s|\Z)",
+                  caps, re.S | re.M)
+    title = (m.group(1) or "").strip() if m else ""
+    body = re.sub(r"\s+", " ", m.group(2).replace("**", "")).strip() if m else ""
+    cap = (f"{title}. " if title else "") + body
+    cap = cap.replace("single annotator", "five annotators, 50 papers each")
+    if not cap or "single annotator" in cap:
+        sys.exit("Figure9 caption extraction looks wrong")
+    cells = "".join(f"<div class='cell'>{p}</div>" for p in panels)
+    doc = ("<!doctype html><html><head><meta charset='utf-8'><style>"
+           "@page{size:A4;margin:12mm}html,body{margin:0}"
+           ".g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));"
+           "gap:4mm;align-items:start}"
+           ".cell svg{width:100%;max-width:100%;height:auto;display:block}"
+           ".cap{font:8pt/1.3 'Times New Roman',Times,serif;text-align:justify;"
+           "margin-top:4mm;padding-right:1mm}</style></head><body>"
+           "<div class='g'>" + cells + "</div>"
+           f"<div class='cap'><b>Figure 9.</b> {cap}</div></body></html>")
+    hp = Path(os.environ.get("TEMP", ".")) / "cbc-figure9-export.htm"
+    hp.write_text(doc, encoding="utf-8")
+    out_pdf.unlink(missing_ok=True)
+    subprocess.run([EDGE, "--headless", "--disable-gpu", "--no-pdf-header-footer",
+                    f"--print-to-pdf={out_pdf}", hp.as_uri()],
+                   capture_output=True, timeout=240)
+    hp.unlink(missing_ok=True)
+    if not out_pdf.exists() or out_pdf.stat().st_size == 0:
+        sys.exit("Figure9.pdf export failed")
+    print(f"  wrote figures/Figure9.pdf (regenerated, {out_pdf.stat().st_size} B)")
+
+
 def _write_bytes(src: Path, dst: Path) -> None:
     data = src.read_bytes()
     for attempt in range(12):
@@ -123,11 +159,22 @@ def manifest() -> list[str]:
 
 
 def check() -> None:
-    rows = (SUB / "MANIFEST.tsv").read_text(encoding="utf-8").splitlines()[1:]
+    mp = SUB / "MANIFEST.tsv"
+    if not mp.exists():
+        sys.exit("MANIFEST.tsv not found; run `python scripts/make_cbc_submission.py` first")
+    lines = mp.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0] != "file\tsize\tsha256_16":
+        sys.exit("MANIFEST.tsv header unexpected; rerun the assembly")
+    rows = lines[1:]
     listed = set()
     bad = 0
     for r in rows:
-        name, size, h = r.split("\t")
+        parts = r.split("\t")
+        if len(parts) != 3:
+            print(f"  MALFORMED {r[:60]!r}"); bad += 1; continue
+        name, size, h = parts
+        if name in listed:
+            print(f"  DUPLICATE {name}"); bad += 1; continue
         listed.add(name)
         p = SUB / name
         if not p.exists():
@@ -171,6 +218,7 @@ def main() -> None:
     print(f"  wrote figures/ ({len(VEC) + len(RAS) + 1} files) and source-captures/ ({len(CAPTURES)} files)")
 
     build_figure_s2(SUB / "figures" / "FigureS2.pdf")
+    build_figure9(SUB / "figures" / "Figure9.pdf")
 
     rows = manifest()
     print(f"submission assembled: {len(rows)} files")

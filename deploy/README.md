@@ -6,13 +6,13 @@
 |---|---|---|---|
 | empty | 8081 | `deploy/empty-data/`（全新，零播种） | app + scheduler |
 | live | 8082 | `deploy/live-data/`（真库快照；可选） | app（默认无 scheduler） |
-| release | 8083 | `deploy/release-data/`（v1.5 冻结快照 `_v15` 的副本） | app（只读演示） |
+| release | 8083 | `deploy/release-data/`（v1.6 冻结快照 `_v16` 的副本） | app（只读演示） |
 
 ## 从干净 clone 起跑（G 线，2026-10-15）
 
 ```bash
 cp .env.example .env                     # 可选；无 .env 也能起（浏览模式；聊天/挖掘需 DEEPSEEK_API_KEY）
-python deploy/bootstrap.py               # 建数据目录；有 data/releases/_v15 时自动装载 release 档并校验 sha256
+python deploy/bootstrap.py               # 建数据目录；有 data/releases/_v16 时自动装载 release 档并校验 sha256
 docker compose -f deploy/compose.preview.yml up -d    # 镜像不存在时自动 build
 ```
 
@@ -24,8 +24,8 @@ python deploy/bootstrap.py --force            # 强制重装 release 快照（�
 python deploy/bootstrap.py --check            # 对 8081/8082/8083 做 /api/health 探活
 ```
 
-`release` 档默认取 `data/releases/_v15/bioagentdb.sqlite3`（v1.5 冻结库，sha256
-`9B55F8B8…C299E`）；若该文件不在（干净 clone），可用环境变量指向 Zenodo 下载件：
+`release` 档默认取 `data/releases/_v16/bioagentdb.sqlite3`（v1.6 冻结库，sha256
+`15C067D8…94958`）；若该文件不在（干净 clone），可用环境变量指向 Zenodo 下载件：
 `BIOAGENTDB_RELEASE_SNAPSHOT=/path/to/bioagentdb.sqlite3 python deploy/bootstrap.py --tier release`。
 没有快照时 release 档会以空库起（仍是可用的页面）。
 

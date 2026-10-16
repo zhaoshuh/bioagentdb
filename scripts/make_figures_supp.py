@@ -1,7 +1,7 @@
 ﻿"""补充图面板：S1 = 机制（panelS1A–C，3 面板）· S2 = 覆盖（panelS2A–D，4 面板）· S3 = 结果集（栅格，另见 make_figure_s2.py）。
-用法: python scripts/make_figures_supp.py"""
+用法: python scripts/make_figures_supp.py [--stats PATH] [--out DIR] [--no-final]"""
 from __future__ import annotations
-import json, sqlite3, sys
+import argparse, json, sqlite3, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -72,12 +72,18 @@ def panel_s1b() -> str:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--stats", default=str(ROOT / "docs" / "versions" / "v1.5-stats" / "resource-stats.json"))
+    ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--no-final", action="store_true")
+    args = ap.parse_args()
+    stats = json.loads(Path(args.stats).read_text(encoding="utf-8"))
+    out_dir = Path(args.out)
     ev = json.loads((ROOT / "data" / "gold" / "eval-report.json").read_text(encoding="utf-8"))
     evc_path = ROOT / "data" / "gold" / "catalog-view" / "eval-report.json"
     evc = (json.loads(evc_path.read_text(encoding="utf-8")) if evc_path.exists() else ev)
     resc = json.loads((ROOT / "data" / "gold" / "s1-rescan-report.json").read_text(encoding="utf-8"))
     rem = json.loads((ROOT / "data" / "gold" / "s1-remine-report.json").read_text(encoding="utf-8"))
-    stats = json.loads((ROOT / "docs" / "versions" / "v1.5-stats" / "resource-stats.json").read_text(encoding="utf-8"))
     conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     n_total = conn.execute("SELECT COUNT(*) FROM record_normalization").fetchone()[0]
     n_quote = conn.execute("SELECT COUNT(*) FROM record_normalization WHERE quote IS NOT NULL AND quote != ''").fetchone()[0]
@@ -106,8 +112,9 @@ def main() -> None:
         "panelS1B": panel_s1b(),
     }
     for name, svg in panels.items():
-        (OUT / f"{name}.svg").write_text(svg, encoding="utf-8")
-        (FINAL / f"{name}.svg").write_text(svg, encoding="utf-8")
+        (out_dir / f"{name}.svg").write_text(svg, encoding="utf-8")
+        if not args.no_final:
+            (FINAL / f"{name}.svg").write_text(svg, encoding="utf-8")
         print("wrote", name)
 if __name__ == "__main__":
     main()

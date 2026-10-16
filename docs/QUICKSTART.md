@@ -74,11 +74,11 @@ Records/evidence/links land in `../bioagentdb-records/<slug>/records.jsonl` (+ `
 
 ## 4. Optional: the three preview stacks (empty / live / release)
 
-`deploy/compose.preview.yml` runs three isolated deployments side by side, including the **v1.5
+`deploy/compose.preview.yml` runs three isolated deployments side by side, including the **v1.6
 release stack** whose numbers match the paper:
 
 ```bash
-python deploy/bootstrap.py       # create .env if missing + data dirs; load the _v15 release snapshot when present
+python deploy/bootstrap.py       # create .env if missing + data dirs; load the _v16 release snapshot when present
 docker compose -f deploy/compose.preview.yml up -d
 python deploy/bootstrap.py --check            # health-probe all three ports
 ```
@@ -87,9 +87,9 @@ python deploy/bootstrap.py --check            # health-probe all three ports
 |---|---|---|
 | empty | http://127.0.0.1:8081 | fresh, zero-seed |
 | live | http://127.0.0.1:8082 | your own snapshot (`deploy/live-data/`), optional |
-| release | http://127.0.0.1:8083 | copy of the frozen `_v15` release DB (paper-aligned) |
+| release | http://127.0.0.1:8083 | copy of the frozen `_v16` release DB (paper-aligned) |
 
-The release snapshot (`data/releases/_v15/bioagentdb.sqlite3`, sha256 `9B55F8B8…C299E`) is not shipped
+The release snapshot (`data/releases/_v16/bioagentdb.sqlite3`, sha256 `15C067D8…94958`) is not shipped
 in the repo; obtain it from the paper's data release (Zenodo: `10.5281/zenodo.23390867`) or run the release stack empty. If your
 machine uses a proxy for containers, see `deploy/README.md` (set `BIOAGENTDB_CONTAINER_PROXY=` in
 `deploy/.env` or the environment to go direct; default keeps the Docker Desktop proxy alias).

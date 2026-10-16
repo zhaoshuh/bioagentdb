@@ -78,7 +78,11 @@ def build_captions() -> tuple[dict, dict]:
             caps[int(fm.group(1))] = merged
         elif fs and merged:
             supp[int(fs.group(1))] = merged
-    return caps, supp
+    # L-0344/L-0346: render-layer correction of the retired provenance wording
+    # (frozen master captions.md cannot be edited; Figure 9's title carries it)
+    fix = lambda s: s.replace("single annotator", "five annotators, 50 papers each")
+    return ({k: fix(v) for k, v in caps.items()},
+            {k: fix(v) for k, v in supp.items()})
 
 
 def build_references_block() -> str:

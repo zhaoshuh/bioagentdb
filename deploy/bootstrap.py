@@ -5,9 +5,9 @@ Prepares everything a fresh clone needs before `docker compose -f deploy/compose
 
   1. `.env`            — copied from `.env.example` when missing (never overwritten; fill in keys later)
   2. data dirs         — deploy/empty-data, deploy/live-data, deploy/release-data
-  3. release snapshot  — if `data/releases/_v15/bioagentdb.sqlite3` is present, it is copied
+  3. release snapshot  — if `data/releases/_v16/bioagentdb.sqlite3` is present, it is copied
                          (WAL-safe `VACUUM INTO`) to `deploy/release-data/bioagentdb.sqlite3`
-                         and its sha256 is checked against the frozen v1.5 digest.
+                         and its sha256 is checked against the frozen v1.6 digest.
 
 Usage:
   python deploy/bootstrap.py                  # prepare all tiers (safe/idempotent)
@@ -15,7 +15,7 @@ Usage:
   python deploy/bootstrap.py --force          # re-copy the release snapshot even if present
   python deploy/bootstrap.py --check          # HTTP health probe of running stacks (exit 1 on failure)
 
-Environment overrides: BIOAGENTDB_RELEASE_SNAPSHOT (default data/releases/_v15/bioagentdb.sqlite3),
+Environment overrides: BIOAGENTDB_RELEASE_SNAPSHOT (default data/releases/_v16/bioagentdb.sqlite3),
 BIOAGENTDB_PREVIEW_PORTS (default 8081,8082,8083). Stdlib only; no data is ever modified in place.
 """
 from __future__ import annotations
@@ -38,9 +38,9 @@ TIER_DIRS = {
     "release": DEPLOY / "release-data",
 }
 
-DEFAULT_RELEASE_SNAPSHOT = ROOT / "data" / "releases" / "_v15" / "bioagentdb.sqlite3"
-# Frozen v1.5 release DB digest (must stay stable; see docs/paper-plan-ledger.md).
-RELEASE_V15_SHA256 = "9B55F8B8AA11C05C8222155656493A78EB196E0061C01CF64DF08F1E867C299E"
+DEFAULT_RELEASE_SNAPSHOT = ROOT / "data" / "releases" / "_v16" / "bioagentdb.sqlite3"
+# Frozen v1.6 release DB digest (must stay stable; see docs/paper-plan-ledger.md).
+RELEASE_SNAPSHOT_SHA256 = "15C067D85F24826963733A7A1711C49818E87DD990667B8DAE6B883F0C694958"
 
 
 def log(msg: str) -> None:
@@ -121,16 +121,16 @@ def prepare_release(force: bool) -> None:
     dst = TIER_DIRS["release"] / "bioagentdb.sqlite3"
     if not src.is_file():
         log(f"release tier: snapshot not found at {src}")
-        log("  -> get the v1.5 release DB (Zenodo) into data/releases/_v15/, or start the "
+        log("  -> get the v1.6 release DB (Zenodo) into data/releases/_v16/, or start the "
             "empty tier and mine your own (see docs/QUICKSTART.md)")
         return
     if src == DEFAULT_RELEASE_SNAPSHOT:
         src_digest = sha256_file(src)
-        if src_digest != RELEASE_V15_SHA256:
+        if src_digest != RELEASE_SNAPSHOT_SHA256:
             log(f"WARNING: source {src.relative_to(ROOT)} sha256 {src_digest} does not match the "
-                f"frozen v1.5 digest {RELEASE_V15_SHA256} — proceeding, but verify your copy")
+                f"frozen v1.6 digest {RELEASE_SNAPSHOT_SHA256} — proceeding, but verify your copy")
         else:
-            log(f"source snapshot verified: {src.relative_to(ROOT)} (frozen v1.5 sha256)")
+            log(f"source snapshot verified: {src.relative_to(ROOT)} (frozen v1.6 sha256)")
     copy_sqlite(src, dst, force)
     target = sqlite_summary(dst)
     if target.get("integrity") != "ok":

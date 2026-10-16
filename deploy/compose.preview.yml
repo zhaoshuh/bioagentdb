@@ -4,7 +4,7 @@
 #
 # 干净 clone 起跑（G 线，2026-10-15）：
 #   1) cp .env.example .env                       # 可选：无 .env 也能起（浏览模式；聊天/挖掘需 key）
-#   2) python deploy/bootstrap.py                 # 准备数据目录（release 档自动装载 _v15 快照；见 deploy/README.md）
+#   2) python deploy/bootstrap.py                 # 准备数据目录（release 档自动装载 _v16 快照；见 deploy/README.md）
 #   3) docker compose -f deploy/compose.preview.yml up -d   # 镜像不存在时自动 build
 #   4) 空库 http://127.0.0.1:8081 ；现库 http://127.0.0.1:8082 ；release http://127.0.0.1:8083
 #   5) 停：docker compose -f deploy/compose.preview.yml down
@@ -130,9 +130,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # 论文对齐演示（L-0316）：服务 v1.5 冻结发布的副本（deploy/release-data），数字与论文一致；
+  # 论文对齐演示（L-0316）：服务 v1.6 冻结发布的副本（deploy/release-data），数字与论文一致；
   # 只读用途（挖掘请用 live 栈）。URL 决策见台账 L-0310/L-0312。
-  # 快照装载：python deploy/bootstrap.py --tier release（默认取 data/releases/_v15 并校验 sha256）。
+  # 快照装载：python deploy/bootstrap.py --tier release（默认取 data/releases/_v16 并校验 sha256）。
   release:
     image: bioagentdb:latest
     build:

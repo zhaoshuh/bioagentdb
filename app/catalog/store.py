@@ -9,7 +9,7 @@ from typing import Any
 
 from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
-SNAPSHOT = ROOT_DIR / "docs" / "versions" / "v1.5-stats" / "resource-stats.json"
+SNAPSHOT = ROOT_DIR / "docs" / "versions" / "v1.6-stats" / "resource-stats.json"
 
 from app.core.db import db
 from app.core.utils import norm_space, split_terms_like
@@ -452,7 +452,7 @@ def throughput() -> dict:
     }
 
 
-RELEASE = "v1.5"   # 当前发布版（论文 §4.5 引用）
+RELEASE = "v1.6"   # 当前发布版（论文 §4.5 引用）
 
 
 
