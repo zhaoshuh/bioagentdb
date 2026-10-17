@@ -19,7 +19,7 @@ Optional components that are **not** part of the clone:
 | Optional piece | Why you may want it | How to get it |
 |---|---|---|
 | `vendor/omics-discovery` (branch `lite`) | extended accession regexes + deep T3 verification; the app degrades gracefully without it (a reduced regex set is used) | `git clone -b lite https://github.com/zhaoshuh/omics-discovery vendor/omics-discovery` then `pip install -e vendor/omics-discovery` (or mount it into the image) |
-| v1.6 release DB snapshot (`data/releases/_v16/bioagentdb.sqlite3`, sha256 `15C067D8…94958`) | browse the exact catalog published with the paper (2,289 dataset records) | download from the paper's data release (Zenodo, `10.5281/zenodo.23414954`) and place it at that path |
+| v1.6 release DB snapshot (`data/releases/_v16/bioagentdb.sqlite3`, sha256 `15C067D8…94958`) | browse the exact catalog published with the paper (2,289 dataset records) | download from the paper's data release (Zenodo, `10.5281/zenodo.23433277`) and place it at that path |
 
 Everything else you need is in the clone. Verify: `ls app web deploy scripts requirements.txt Dockerfile`.
 
@@ -77,7 +77,7 @@ python scripts/cli.py serve          # http://127.0.0.1:8000
 **Release snapshot (paper-aligned browsing):**
 
 ```bash
-# 1) download the release package (Zenodo: 10.5281/zenodo.23414954; it ships as split parts -
+# 1) download the release package (Zenodo: 10.5281/zenodo.23433277; it ships as split parts -
 #    join them in order per its README), place the DB at data/releases/_v16/bioagentdb.sqlite3, then either
 python deploy/bootstrap.py --tier release         # copies it (WAL-safe VACUUM INTO) to deploy/release-data/
 docker compose -f deploy/compose.preview.yml up -d

@@ -90,7 +90,7 @@ python deploy/bootstrap.py --check            # health-probe all three ports
 | release | http://127.0.0.1:8083 | copy of the frozen `_v16` release DB (paper-aligned) |
 
 The release snapshot (`data/releases/_v16/bioagentdb.sqlite3`, sha256 `15C067D8…94958`) is not shipped
-in the repo; obtain it from the paper's data release (Zenodo: `10.5281/zenodo.23414954` (split parts; join per its README)) or run the release stack empty. If your
+in the repo; obtain it from the paper's data release (Zenodo: `10.5281/zenodo.23433277` (split parts; join per its README)) or run the release stack empty. If your
 machine uses a proxy for containers, see `deploy/README.md` (default: direct; set `BIOAGENTDB_CONTAINER_PROXY=http://host.docker.internal:<port>` in `deploy/.env` or the environment if your network needs a proxy).
 
 ## 5. Without Docker (conda / venv)

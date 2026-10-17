@@ -253,6 +253,8 @@ def build_zenodo(out: Path, gh: Path) -> None:
 
     # record 4: paper sources (manuscript + figures + evidence)
     r4 = z / "record4-paper-sources"
+    if r4.exists():
+        shutil.rmtree(r4)
     r4.mkdir(parents=True, exist_ok=True)
     fin = ROOT / "docs" / "paper" / "final"
     cbc = ROOT / "docs" / "paper" / "cbc"
@@ -260,13 +262,19 @@ def build_zenodo(out: Path, gh: Path) -> None:
                      (cbc / "cbc-paper.pdf", "manuscript.pdf"),
                      (cbc / "v2" / "captions-v1.6.md", "captions.md"),
                      (cbc / "v2" / "tables-v1.6.md", "tables.md"),
-                     (cbc / "overrides.md", "overrides.md"),
+                     (cbc / "v2" / "NUMBER-SOURCES-v1.6.md", "NUMBER-SOURCES-v1.6.md"),
                      (fin / "references.md", "references.md")):
         if src.exists():
             copy(src, r4 / dst)
     for tree in ("figures", "evidence"):
         if (fin / tree).exists():
             copy(fin / tree, r4 / tree)
+    subfig = cbc / "submission" / "figures"
+    for pair in (("Figure9.pdf", "figure9.pdf"), ("FigureS2.pdf", "figureS2.pdf")):
+        src = subfig / pair[0]
+        if src.exists():
+            copy(src, r4 / "figures" / pair[1])
+    (r4 / "SOURCES-NOTE.md").write_text(SOURCES_NOTE, encoding="utf-8")
     write_checksums(r4)
     n4 = sum(1 for f in r4.rglob("*") if f.is_file())
     print(f"  zenodo/record4-paper-sources/: {n4} files")
@@ -402,14 +410,35 @@ UPLOAD_GUIDE = """# Upload guide (staging) — prepared {date}
   2026-10 per-link re-check rows and the delta / P4 reports).
 
 ### Record 4 — paper sources  → uploaded LATER (after the e-series freeze, P10)
-- The staging tree builds `record4-paper-sources/` for completeness; upload it as a new
-  version only when the controller confirms (post-e2).
+- The staging tree builds `record4-paper-sources/` for completeness; upload it as a **new
+  record** (not a new version) when the controller confirms (post-e2): 12 parts
+  (`record4-paper-sources.zip.001`-`.012`) + `-JOIN-NOTE.md` + `-SHA256SUMS.txt`.
 
 ## 3 · After uploading — send back
 
-- GitHub release URL; the new-version DOIs for records 1-3 (concept DOIs; record 4 follows after the e-series freeze).
+- GitHub release URL; the **concept DOIs** of records 1-3 (record 4 follows after the e-series freeze).
 
 The controller then re-runs the release checks and prepares the final submission package.
+"""
+
+
+SOURCES_NOTE = """# BioAgentDB \u2014 manuscript sources (v1.6)
+
+Contents
+- `manuscript.md` / `manuscript.pdf` \u2014 the submitted manuscript (direct-edited v1.6 text).
+- `captions.md`, `tables.md` \u2014 figure captions and supplementary tables as generated from
+  the frozen v1.6 sources.
+- `figures/` \u2014 the figure sources and submitted deliverables (vector PDFs, panel SVGs,
+  hi-res rasters; `figure9.pdf` / `figureS2.pdf` are overlaid with the submitted re-exports
+  carrying the corrected captions/labels).
+- `evidence/` \u2014 the full-resolution source captures for Figures 6-8 and S3-S4.
+- `references.md` \u2014 the verified reference library (61 entries).
+- `NUMBER-SOURCES-v1.6.md` \u2014 the number-provenance map (every quantitative claim to its source).
+
+Build chain: the v1.6 manuscript is edited directly in `docs/paper/cbc/cbc-paper.md`
+(`make_cbc_paper.py` retired; guard active) and rendered by `make_cbc_pdf.py`; the
+supplementary material comes from `v2/tables-v1.6.md` + `v2/captions-v1.6.md`. The
+`overrides.md` patch set from the earlier release cycle is not used and is not included.
 """
 
 
