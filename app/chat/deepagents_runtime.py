@@ -98,9 +98,20 @@ def _model():
 def _saver():
     global _SAVER
     if _SAVER is None:
-        from langgraph.checkpoint.memory import InMemorySaver
+        try:
+            import sqlite3
 
-        _SAVER = InMemorySaver()
+            from langgraph.checkpoint.sqlite import SqliteSaver
+
+            path = cfg.data_dir / "agent_checkpoints.sqlite3"
+            conn = sqlite3.connect(str(path), check_same_thread=False)
+            conn.execute("PRAGMA journal_mode=WAL")
+            _SAVER = SqliteSaver(conn)
+        except Exception:  # noqa: BLE001
+            logger.warning("sqlite checkpointer unavailable; using in-memory", exc_info=True)
+            from langgraph.checkpoint.memory import InMemorySaver
+
+            _SAVER = InMemorySaver()
     return _SAVER
 
 

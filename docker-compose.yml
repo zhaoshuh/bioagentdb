@@ -23,10 +23,17 @@ services:
       #   BIOAGENTDB_PUBLIC_DEMO=1 (read-only guard, chat/search/export only)
       BIOAGENTDB_DB_PATH: ${BIOAGENTDB_DB_PATH:-}
       BIOAGENTDB_PUBLIC_DEMO: ${BIOAGENTDB_PUBLIC_DEMO:-0}
+      # Optional proxy for container egress. Docker Desktop can reach the host
+      # proxy via host.docker.internal; leave empty for direct-only.
+      HTTP_PROXY: ${BIOAGENTDB_CONTAINER_PROXY:-}
+      HTTPS_PROXY: ${BIOAGENTDB_CONTAINER_PROXY:-}
+      NO_PROXY: localhost,127.0.0.1
     ports:
       - "8000:8000"
     volumes:
       - ./:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
     restart: unless-stopped
 
