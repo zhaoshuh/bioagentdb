@@ -446,6 +446,11 @@ def wb_message(sid: str, body: WorkbenchMessage):
             for ev in ming.run_turn(sid, body.message):
                 yield _sse(ev)
             return
+        from app.chat import deepagents_runtime as da
+        if da.enabled():
+            for raw in da.stream_research(sid, body.message):
+                yield raw
+            return
         steps: list[dict] = []
         for ev in workbench.run_turn(sid, body.message):
             if ev.get("event") in ("step", "progress"):

@@ -1169,3 +1169,188 @@ def run_turn(sid: str, message: str):
         logger.exception("workbench turn failed: %s", exc)
         yield {"event": "error", "message": f"{type(exc).__name__}: {exc}"}
     yield {"event": "done"}
+
+def run_pipeline(sid: str, message: str, profile: dict):
+    """Deterministic research pipeline after the profile is ready.
+
+    Yields the same step/progress/results/report events as run_turn and
+    returns the final report dict. No clarify, no assistant message.
+    """
+    state = _state(sid)
+    # v1.6（L-0292）：查证信号须在"同画像复用"门之前判定——明示查证不得被缓存短路
+    fp = _fingerprint(profile)
+    cache = state.get("search_cache") or {}
+    sig = state.get("research_signal") or {}
+    explicit_lookup = web_research.looks_like_lookup_request(message)
+    need_research = bool(sig.get("needed")) or explicit_lookup
+    if not need_research:
+        need_research = (web_research.looks_like_unknown_topic(message)
+                         or web_research.looks_like_unknown_topic(
+                             str(profile.get("topic") or "")))
+    research_query = (str(sig.get("query") or "").strip()
+                      or str(profile.get("topic") or profile.get("disease") or "").strip())
+    cached_research = (cache.get("report", {}).get("report") or {}).get("research")
+
+    # 同轮/同画像复用（空结果 / "search again" / 明示查证 / 该查未查 → 重跑）
+    if (cache.get("fp") == fp and cache.get("report") and not cache.get("empty")
+            and not _REFRESH_RE.search(message)
+            and not explicit_lookup
+            and not (need_research and not cached_research)):
+        if cached_research:
+            yield {"event": "research", "research": cached_research}
+        yield {"event": "results", "catalog": cache["report"].get("catalog") or [],
+               "candidates": cache["report"].get("candidates") or [],
+               "note": "reusing the previous search for the same profile"}
+        report = cache["report"]["report"]
+        yield {"event": "report", "report": report}
+        return report
+
+    yield {"event": "step", "name": "catalog", "status": "start"}
+    t_cat = time.time()
+    catalog = search_catalog(profile)
+    yield {"event": "step", "name": "catalog", "status": "done",
+           "detail": f"{len(catalog)} catalog record(s)",
+           "ms": int((time.time() - t_cat) * 1000)}
+
+    # v1.6（L-0292）：未知知识 → 联网查证 → 检索改写（need_research/research_query 已在缓存门之前算好）
+    research_brief: dict | None = None
+    research_attempted = False
+    if need_research and web_research.enabled() and research_query:
+        research_attempted = True
+        yield {"event": "step", "name": "research", "status": "start"}
+        t_res = time.time()
+        research_brief = yield from _run_phase_with_events(
+            lambda emit: web_research.brief(research_query, context=message,
+                                            on_progress=emit),
+            "research", heartbeat_s=5.0)
+        yield {"event": "step", "name": "research", "status": "done",
+               "detail": _research_detail(research_brief),
+               "ms": int((time.time() - t_res) * 1000)}
+        if research_brief:
+            yield {"event": "research", "research": research_brief}
+
+    def _expand(emit) -> list[str]:
+        st = _state(sid)
+        qs = expand_queries(profile, st, research=research_brief)
+        _set_state(sid, st)
+        return qs
+
+    t_q = time.time()
+    queries = yield from _run_phase_with_events(_expand, "queries", heartbeat_s=5.0)
+    yield {"event": "progress", "phase": "queries",
+           "text": f"planned {len(queries)} query variant(s) · "
+                   f"{int((time.time() - t_q) * 1000)}ms",
+           "t_ms": int(time.time() * 1000)}
+
+    yield {"event": "step", "name": "sources", "status": "start"}
+    t_src = time.time()
+    candidates, per_source, members_map = yield from _run_phase_with_events(
+        lambda emit: search_sources(profile, queries, on_progress=emit), "sources")
+    yield {"event": "step", "name": "sources", "status": "done",
+           "counts": {k: v.get("hits") for k, v in per_source.items()},
+           "detail": per_source,
+           "ms": int((time.time() - t_src) * 1000)}
+
+    # 首轮全空且未查证过 → 查证 → 重扩词 → 重跑五源一次（有界；L-0292）
+    if (not candidates and not catalog and not research_attempted
+            and web_research.enabled()):
+        rq = research_query or str(profile.get("topic") or profile.get("disease") or "").strip()
+        if rq:
+            research_attempted = True
+            yield {"event": "step", "name": "research", "status": "start"}
+            t_res2 = time.time()
+            research_brief = yield from _run_phase_with_events(
+                lambda emit: web_research.brief(rq, context=message, on_progress=emit),
+                "research", heartbeat_s=5.0)
+            yield {"event": "step", "name": "research", "status": "done",
+                   "detail": _research_detail(research_brief),
+                   "ms": int((time.time() - t_res2) * 1000)}
+            if research_brief:
+                yield {"event": "research", "research": research_brief}
+
+                def _expand2(emit) -> list[str]:
+                    st = _state(sid)
+                    qs = expand_queries(profile, st, research=research_brief)
+                    _set_state(sid, st)
+                    return qs
+
+                queries = yield from _run_phase_with_events(
+                    _expand2, "queries", heartbeat_s=5.0)
+                yield {"event": "progress", "phase": "queries",
+                       "text": f"re-planned {len(queries)} query variant(s) after web "
+                               "research",
+                       "t_ms": int(time.time() * 1000)}
+                yield {"event": "step", "name": "sources", "status": "start"}
+                t_src2 = time.time()
+                candidates, per_source, members_map = yield from _run_phase_with_events(
+                    lambda emit: search_sources(profile, queries, on_progress=emit),
+                    "sources")
+                yield {"event": "step", "name": "sources", "status": "done",
+                       "counts": {k: v.get("hits") for k, v in per_source.items()},
+                       "detail": per_source,
+                       "ms": int((time.time() - t_src2) * 1000)}
+
+    yield {"event": "step", "name": "dedup", "status": "done",
+           "detail": f"{len(candidates)} unique candidate(s)"}
+    candidates = presort(candidates, profile, research=research_brief)
+
+    state = _state(sid)
+    pdf_used = int(state.get("pdf_used") or 0)
+    yield {"event": "step", "name": "papers", "status": "start"}
+    t_pap = time.time()
+    fulltext_stats = yield from _run_phase_with_events(
+        lambda emit: paper_datasets.attach_datasets(
+            candidates, members_map, k=K_FULLTEXT, pdf_cap=PDF_SESSION_CAP,
+            pdf_used=pdf_used, on_progress=emit), "papers")
+    state = _state(sid)
+    state["pdf_used"] = fulltext_stats.get("pdf_used", pdf_used)
+    _set_state(sid, state)
+    yield {"event": "step", "name": "papers", "status": "done",
+           "detail": f"{fulltext_stats.get('datasets', 0)} dataset(s) from "
+                     f"{fulltext_stats.get('fulltext_ok', 0)} paper(s) — "
+                     + " · ".join(f"{k} {v}" for k, v in
+                                  (fulltext_stats.get('kinds') or {}).items()),
+           "ms": int((time.time() - t_pap) * 1000)}
+
+    yield {"event": "step", "name": "verify", "status": "start"}
+    t_ver = time.time()
+    candidates = yield from _run_phase_with_events(
+        lambda emit: verify_candidates(candidates, on_progress=emit), "verify")
+    yield {"event": "step", "name": "verify", "status": "done",
+           "detail": f"checked {min(VERIFY_MAX, len(candidates))} link(s)",
+           "ms": int((time.time() - t_ver) * 1000)}
+
+    yield {"event": "results", "catalog": catalog[:6],
+           "candidates": [{
+               "title": c.get("title") or "", "year": c.get("year"),
+               "sources": json.loads(c.get("sources") or "[]"),
+               "landing_url": c.get("landing_url") or "",
+               "t2": bool(c.get("t2")),
+               "fulltext_kind": c.get("fulltext_kind") or "none",
+               "datasets": c.get("datasets") or [],
+           } for c in candidates[:TOP_N]]}
+
+    yield {"event": "step", "name": "report", "status": "start"}
+    t_rep = time.time()
+    report = build_report(profile, catalog, candidates, per_source, fulltext_stats,
+                          research=research_brief)
+    yield {"event": "report", "report": report}
+    state = _state(sid)
+    state["search_cache"] = {
+        "fp": fp,
+        "empty": not (catalog or candidates),
+        "report": {"catalog": catalog[:6],
+                   "candidates": [{
+                       "title": c.get("title") or "", "year": c.get("year"),
+                       "sources": json.loads(c.get("sources") or "[]"),
+                       "landing_url": c.get("landing_url") or "",
+                       "t2": bool(c.get("t2")),
+                       "fulltext_kind": c.get("fulltext_kind") or "none",
+                       "datasets": c.get("datasets") or [],
+                   } for c in candidates[:TOP_N]],
+                   "report": report},
+    }
+    _set_state(sid, state)
+    yield {"event": "step", "name": "report", "status": "done",
+           "ms": int((time.time() - t_rep) * 1000)}
+    return report

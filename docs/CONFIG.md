@@ -149,3 +149,4 @@ release=8083 v1.6 冻结对齐。一步准备 + 一键起：`python deploy/boots
 - 依赖固定在 `requirements.txt`（`deepagents==0.7.28`、`langchain==1.4.6`、`langgraph==1.2.16`、`langchain-openai==1.7.2`）。
 - 未安装依赖或没有 API key 时**自动回退 legacy**，服务仍可启动；显式 `BIOAGENTDB_AGENT_IMPL=legacy` 可强制旧实现。
 - 会话状态仍写入 `chat_sessions`/`chat_messages`；DeepAgents 的线程 checkpointer 目前是进程内，重启后新线程从库内状态重建。
+- Research 与 Ming 共用同一意图核心：Research 调用 `run_research`（确定性流水线，step/progress 实时回传），Ming 保存 profile 后生成 mining proposal。

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _CURRENT_SID: contextvars.ContextVar[str] = contextvars.ContextVar("deepagents_sid", default="")
 _ASK_AGENT = None
 _MING_AGENT = None
+_RESEARCH_AGENT = None
 _SAVER = None
 _PENDING: dict[str, dict] = {}
 
@@ -35,6 +36,20 @@ def _sid_from_config(config) -> str:
         return str((config or {}).get("configurable", {}).get("thread_id") or "")
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _sid_current(config=None) -> str:
+    sid = _sid_from_config(config)
+    if sid:
+        return sid
+    try:
+        from langgraph.config import get_config
+
+        cfg = get_config()
+        sid = str((cfg or {}).get("configurable", {}).get("thread_id") or "")
+    except Exception:  # noqa: BLE001
+        sid = ""
+    return sid or _CURRENT_SID.get()
 
 
 _AVAILABLE: bool | None = None
@@ -196,7 +211,7 @@ def propose_mining(topic: str, query: str = "",
         "query": query or topic, "is_new_theme": bool(is_new), "in_scope": True,
         "theme_kind": "topic" if is_new else "",
     }
-    sid = _sid_from_config(config) or _CURRENT_SID.get()
+    sid = _sid_current(config)
     pending = {"theme": slug, "name": name or topic, "budget": budget,
                "papers_per_round": budget, "cadence_hours": cadence,
                "queries": queries, "query": query or topic,
@@ -388,6 +403,78 @@ def confirm_ask(session_id: str) -> dict:
                     f"{task['papers_per_round']} papers per round, then a patrol every "
                     f"{task['cadence_hours']}h."}
 
+# ---------------------------------------------------------------- shared intent tools
+
+def save_profile(topic: str = "", organism: str = "", tissue: str = "",
+                 modalities: list[str] | None = None, keywords: list[str] | None = None,
+                 ready: bool = False, config: RunnableConfig | None = None) -> dict:
+    """Save the shared mining/research profile for the current session. Call this
+    once the topic is clear (even if the user skipped details), with ready=true.
+    Empty fields keep their previous values."""
+    sid = _sid_current(config)
+    if not sid:
+        return {"ok": False, "message": "no session"}
+    state = _state(sid)
+    profile = dict(state.get("profile") or {})
+    topic = (topic or "").strip()
+    if topic:
+        profile["topic"] = topic[:140]
+        if not profile.get("disease"):
+            profile["disease"] = topic[:140]
+    if organism.strip():
+        profile["organism"] = organism.strip()[:80]
+    if tissue.strip():
+        profile["tissue"] = tissue.strip()[:80]
+    if modalities:
+        profile["modalities"] = [str(m).strip() for m in modalities if str(m).strip()][:8]
+    if keywords:
+        old = [str(k) for k in (profile.get("keywords") or [])]
+        for k in keywords:
+            k = str(k).strip()
+            if k and k not in old:
+                old.append(k)
+        profile["keywords"] = old[:12]
+    _update_state(sid, profile=profile, profile_ready=bool(ready),
+                  ming_ready=bool(ready))
+    return {"ok": True, "ready": bool(ready), "profile": profile}
+
+
+def run_research(config: RunnableConfig | None = None) -> dict:
+    """Run the deterministic research pipeline for the saved profile. It streams
+    step/progress/results/report events and returns the counts + report summary.
+    Call only after save_profile(ready=true)."""
+    from langgraph.config import get_stream_writer
+
+    from app.chat import workbench
+
+    sid = _sid_current(config)
+    if not sid:
+        return {"ok": False, "error": "no session"}
+    state = _state(sid)
+    profile = dict(state.get("profile") or {})
+    topic = str(profile.get("topic") or profile.get("disease") or "").strip()
+    if not topic:
+        return {"ok": False, "error": "profile missing; call save_profile(ready=true) first"}
+    writer = get_stream_writer()
+    message = str(state.get("research_message") or topic)
+    report = None
+    try:
+        gen = workbench.run_pipeline(sid, message, profile)
+        while True:
+            ev = next(gen)
+            writer(ev)
+    except StopIteration as stop:
+        report = stop.value
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("research pipeline failed")
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    counts = (report or {}).get("counts") or {}
+    return {"ok": True, "counts": counts,
+            "catalog": counts.get("catalog"), "candidates": counts.get("candidates"),
+            "datasets": counts.get("datasets"),
+            "note": "report emitted in the step stream; summarize these counts only."}
+
+
 # ---------------------------------------------------------------- Ming tools
 
 def record_plan(topic: str = "", organism: str = "", tissue: str = "",
@@ -397,7 +484,7 @@ def record_plan(topic: str = "", organism: str = "", tissue: str = "",
     """Save the mining profile for the current Ming session. Call this when the
     user has supplied enough detail (or says any/skip), with ready=true to
     generate the mining proposal. Fields left empty are kept unchanged."""
-    sid = _sid_from_config(config) or _CURRENT_SID.get()
+    sid = _sid_current(config)
     if not sid:
         return {"ok": False, "message": "no session"}
     state = _state(sid)
@@ -430,7 +517,7 @@ Rules:
    Accept "any" or "skip" as a complete answer.
 2. Never invent accessions, paper counts or datasets. This step is planning only.
 3. When the topic is clear enough (even if the user skipped details), call
-   record_plan(topic=..., organism=..., tissue=..., modalities=[...], ready=true)
+   save_profile(topic=..., organism=..., tissue=..., modalities=[...], ready=true)
    exactly once, then reply with exactly: "Here is the mining plan."
    Do not ask further questions after ready=true.
 4. Keep replies short (1-3 sentences). Do not ask more than two questions.
@@ -438,7 +525,7 @@ Rules:
 """
 
 
-def _ming_agent():
+def _ming_agent():  # shared intent core, Ming mode
     global _MING_AGENT
     if _MING_AGENT is None:
         from deepagents import create_deep_agent
@@ -446,7 +533,7 @@ def _ming_agent():
         model = _model()
         _MING_AGENT = create_deep_agent(
             model=model,
-            tools=[record_plan],
+            tools=[save_profile],
             system_prompt=_MING_PROMPT,
             middleware=[_summarizer(model)],
             checkpointer=_saver(),
@@ -514,4 +601,88 @@ def stream_ming(sid: str, message: str):
         _update_state(sid, rounds=rounds + 1, last_ready=True)
     else:
         _update_state(sid, rounds=rounds + 1, last_ready=False)
+    yield _sse({"event": "done"})
+
+# ---------------------------------------------------------------- Research agent
+
+_RESEARCH_PROMPT = """You are the BioAgentDB research planner. You clarify a biomedical
+data request, then run a deterministic evidence pipeline and report what it found.
+
+Rules:
+1. Ask at most two clarifying questions total, one at a time, only for missing
+   essentials: topic/disease, organism/system, technique/omics or sample constraints.
+   Accept "any" or "skip" as complete.
+2. When the topic is clear enough, call save_profile(topic=..., organism=...,
+   tissue=..., modalities=[...], ready=true) exactly once.
+3. Then call run_research() exactly once. It streams step/progress and the final
+   report; do NOT invent accessions or counts.
+4. After run_research returns, reply in 2-3 sentences using only its counts.
+5. For a new refinement after a report, update the profile and call run_research again.
+6. Refuse unrelated/non-biomedical requests briefly.
+"""
+
+
+def _research_agent():
+    global _RESEARCH_AGENT
+    if _RESEARCH_AGENT is None:
+        from deepagents import create_deep_agent
+
+        model = _model()
+        _RESEARCH_AGENT = create_deep_agent(
+            model=model,
+            tools=[save_profile, run_research],
+            system_prompt=_RESEARCH_PROMPT,
+            middleware=[_summarizer(model)],
+            checkpointer=_saver(),
+        )
+    return _RESEARCH_AGENT
+
+
+def stream_research(sid: str, message: str):
+    """SSE generator for the DeepAgents Research path (custom step events)."""
+    _ensure_session(sid, "research")
+    _add_message(sid, "user", message)
+    state = _state(sid)
+    profile = dict(state.get("profile") or {})
+    goal = state.get("goal") or message
+    _update_state(sid, goal=goal[:300], research_message=message)
+    _CURRENT_SID.set(sid)
+
+    tokens: list[str] = []
+    try:
+        agent = _research_agent()
+        cfg_run = {"configurable": {"thread_id": sid}}
+        ctx = {"goal": goal[:300], "profile": profile,
+               "ready": bool(state.get("profile_ready"))}
+        prompt = (f"[session state] {json.dumps(ctx, ensure_ascii=False)}\n\n"
+                  f"User: {message}")
+        for mode, chunk in agent.stream(
+                {"messages": [{"role": "user", "content": prompt}]},
+                config=cfg_run, stream_mode=["messages", "updates", "custom"]):
+            if mode == "custom":
+                yield _sse(chunk)
+            elif mode == "messages":
+                msg, _meta = chunk
+                typ = str(getattr(msg, "type", "")).lower()
+                content = getattr(msg, "content", "")
+                if typ.startswith("ai") and isinstance(content, str) and content:
+                    tokens.append(content)
+                    yield _sse({"event": "token", "text": content})
+                elif typ == "tool" and getattr(msg, "name", "") == "save_profile":
+                    try:
+                        payload = json.loads(str(content or "{}"))
+                    except Exception:  # noqa: BLE001
+                        payload = {}
+                    if payload.get("profile"):
+                        yield _sse({"event": "profile", "profile": payload["profile"],
+                                    "ready": bool(payload.get("ready")),
+                                    "missing": [], "defaults": []})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("deepagents research failed")
+        yield _sse({"event": "error", "message": f"{type(exc).__name__}: {exc}"})
+        yield _sse({"event": "done"})
+        return
+
+    text = "".join(tokens).strip() or "Research complete — see the report above."
+    _add_message(sid, "assistant", text, {"kind": "report"})
     yield _sse({"event": "done"})
