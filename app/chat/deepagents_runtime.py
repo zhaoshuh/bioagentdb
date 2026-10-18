@@ -94,32 +94,6 @@ def _model():
     )
 
 
-_SANDBOX = None
-
-
-def _sandbox_backend():
-    """Return a DeepAgents BaseSandbox backend if the sidecar is configured."""
-    global _SANDBOX
-    if _SANDBOX is not None:
-        return _SANDBOX
-    mode = os.environ.get("BIOAGENTDB_SANDBOX", "").strip().lower()
-    url = os.environ.get("SANDBOX_URL", "").strip()
-    if mode not in ("remote", "docker", "base") or not url:
-        return None
-    try:
-        from app.chat.sandbox_backend import RemoteSandbox
-
-        sandbox = RemoteSandbox(url, os.environ.get("SANDBOX_TOKEN", ""))
-        if not sandbox.health():
-            logger.warning("sandbox sidecar unreachable at %s; using StateBackend", url)
-            return None
-        _SANDBOX = sandbox
-        return sandbox
-    except Exception:  # noqa: BLE001
-        logger.warning("sandbox backend unavailable; using StateBackend", exc_info=True)
-        return None
-
-
 def _saver():
     global _SAVER
     if _SAVER is None:
@@ -285,9 +259,6 @@ Rules:
 4. Be concise (2-4 sentences). Mention the number of matching papers when known.
 5. When the user asks "how many" about a previous search, use the tool result in
    the conversation; do not guess.
-6. A sandboxed `execute` tool may be available. Use it for calculations or data
-   processing needed for catalog answers (e.g., percentages); it has no network
-   and no access to app secrets.
 """
 
 
@@ -299,40 +270,17 @@ def _summarizer(model):
                                    trigger=("tokens", 24000), keep=("messages", 12))
 
 
-_HITL = {"execute": {"allowed_decisions": ["approve", "edit", "reject"]}}
-
-
-def _pending_approvals(agent, cfg_run) -> list[dict]:
-    try:
-        state = agent.get_state(cfg_run)
-    except Exception:  # noqa: BLE001
-        return []
-    out: list[dict] = []
-    for task in getattr(state, "tasks", ()) or ():
-        for interrupt in getattr(task, "interrupts", ()) or ():
-            value = getattr(interrupt, "value", {}) or {}
-            for req in value.get("action_requests") or []:
-                out.append({"interrupt_id": getattr(interrupt, "id", ""),
-                            "name": req.get("name") or "",
-                            "args": req.get("args") or {},
-                            "description": req.get("description") or ""})
-    return out
-
-
 def _ask_agent():
     global _ASK_AGENT
     if _ASK_AGENT is None:
         from deepagents import create_deep_agent
 
         model = _model()
-        backend = _sandbox_backend()
         _ASK_AGENT = create_deep_agent(
             model=model,
             tools=[catalog_stats, search_records, propose_mining, task_status],
             system_prompt=_ASK_PROMPT,
             middleware=[_summarizer(model)],
-            backend=backend,
-            interrupt_on=_HITL if backend else None,
             checkpointer=_saver(),
         )
     return _ASK_AGENT
@@ -410,61 +358,11 @@ def stream_ask(message: str, session_id: str | None, resume=None):
         yield _sse({"type": "done"})
         return
 
-    approvals = _pending_approvals(agent, cfg_run)
-    if approvals:
-        yield _sse({"type": "approval_required", "session_id": sid,
-                    "approvals": approvals})
-        yield _sse({"type": "meta", "session_id": sid, "kind": "approval"})
-        yield _sse({"type": "done"})
-        return
-
     text = final_text or "".join(tokens)
     _add_message(sid, "assistant", text, {"kind": kind})
     _update_state(sid, last_kind=kind)
     yield _sse({"type": "meta", "session_id": sid, "kind": kind})
     yield _sse({"type": "done"})
-
-
-def stream_approval(session_id: str, decision: str = "approve",
-                    message: str = "", edited_args: dict | None = None):
-    """Resume a paused HITL tool call with approve/reject/edit."""
-    from langgraph.types import Command
-
-    from app.chat import workbench
-
-    sess = workbench.get_session(session_id)
-    kind = (sess or {}).get("kind") or "ask"
-    if kind == "ask":
-        agent, stream_fn = _ask_agent(), stream_ask
-    elif kind == "ming":
-        agent, stream_fn = _ming_agent(), stream_ming
-    else:
-        agent, stream_fn = _research_agent(), stream_research
-    cfg_run = {"configurable": {"thread_id": session_id}}
-    actions = _pending_approvals(agent, cfg_run)
-    if not actions:
-        def _none():
-            yield _sse({"type": "error", "message": "No pending approval for this session."})
-            yield _sse({"type": "done"})
-        return _none()
-
-    decisions: list[dict] = []
-    for i, action in enumerate(actions):
-        if decision == "reject":
-            decisions.append({"type": "reject",
-                              "message": message or "User rejected the tool call."})
-        elif decision == "edit" and i == 0:
-            decisions.append({"type": "edit",
-                              "edited_action": {"name": action.get("name") or "execute",
-                                                "args": edited_args or action.get("args") or {}}})
-        else:
-            decisions.append({"type": "approve"})
-    cmd = Command(resume={"decisions": decisions})
-    if kind == "ask":
-        return stream_ask("", session_id, resume=cmd)
-    if kind == "ming":
-        return stream_ming(session_id, "", resume=cmd)
-    return stream_research(session_id, "", resume=cmd)
 
 
 def confirm_ask(session_id: str) -> dict:
@@ -632,8 +530,6 @@ Rules:
    exactly once, then reply with exactly: "Here is the mining plan."
    Do not ask further questions after ready=true.
 4. Keep replies short (1-3 sentences). Do not ask more than two questions.
-   A sandboxed `execute` tool may be available; use it only for calculations or
-   data processing, never for secrets. It has no network.
 5. Current session state is provided below; use it instead of asking again.
 """
 
@@ -644,14 +540,11 @@ def _ming_agent():  # shared intent core, Ming mode
         from deepagents import create_deep_agent
 
         model = _model()
-        backend = _sandbox_backend()
         _MING_AGENT = create_deep_agent(
             model=model,
             tools=[save_profile],
             system_prompt=_MING_PROMPT,
             middleware=[_summarizer(model)],
-            backend=backend,
-            interrupt_on=_HITL if backend else None,
             checkpointer=_saver(),
         )
     return _MING_AGENT
@@ -695,13 +588,6 @@ def stream_ming(sid: str, message: str, resume=None):
     except Exception as exc:  # noqa: BLE001
         logger.exception("deepagents ming failed")
         yield _sse({"event": "token", "text": f"The agent hit an error: {exc}"})
-        yield _sse({"event": "done"})
-        return
-
-    approvals = _pending_approvals(agent, cfg_run)
-    if approvals:
-        yield _sse({"event": "approval_required", "session_id": sid,
-                    "approvals": approvals})
         yield _sse({"event": "done"})
         return
 
@@ -766,8 +652,6 @@ Rules:
 5. After run_research returns, reply in 2-3 sentences using only its counts.
 5. For a new refinement after a report, update the profile and call run_research again.
 6. Refuse unrelated/non-biomedical requests briefly.
-7. A sandboxed `execute` tool may be available; use it for calculations or data
-   processing needed for the request; it has no network or app secrets.
 """
 
 
@@ -777,14 +661,11 @@ def _research_agent():
         from deepagents import create_deep_agent
 
         model = _model()
-        backend = _sandbox_backend()
         _RESEARCH_AGENT = create_deep_agent(
             model=model,
             tools=[save_profile, run_research],
             system_prompt=_RESEARCH_PROMPT,
             middleware=[_summarizer(model)],
-            backend=backend,
-            interrupt_on=_HITL if backend else None,
             checkpointer=_saver(),
         )
     return _RESEARCH_AGENT
@@ -835,13 +716,6 @@ def stream_research(sid: str, message: str, resume=None):
     except Exception as exc:  # noqa: BLE001
         logger.exception("deepagents research failed")
         yield _sse({"event": "error", "message": f"{type(exc).__name__}: {exc}"})
-        yield _sse({"event": "done"})
-        return
-
-    approvals = _pending_approvals(agent, cfg_run)
-    if approvals:
-        yield _sse({"event": "approval_required", "session_id": sid,
-                    "approvals": approvals})
         yield _sse({"event": "done"})
         return
 
