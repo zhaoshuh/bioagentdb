@@ -423,7 +423,7 @@ def _pick_questions(state: dict, missing: list[str]) -> list[str]:
 def _fingerprint(profile: dict) -> str:
     core = {k: profile.get(k) for k in
             ("topic", "disease", "organism", "tissue", "modalities",
-             "sample_size_min", "keywords", "concepts", "ontology")}
+             "sample_size_min", "keywords", "concepts")}
     return hashlib.sha1(json.dumps(core, sort_keys=True, ensure_ascii=False)
                         .encode("utf-8")).hexdigest()[:16]
 
@@ -484,21 +484,18 @@ def expand_queries(profile: dict, state: dict,
     if fp in cache:
         return list(cache[fp])
     topic = profile.get("topic") or profile.get("disease") or "omics"
-    ontology_terms: list[str] = []
-    for info in (profile.get("ontology") or {}).values():
-        if not isinstance(info, dict):
+    alias_terms: list[str] = []
+    for c in (profile.get("concepts") or []):
+        if not isinstance(c, dict) or c.get("needs_confirmation"):
             continue
-        label = str(info.get("label") or "").strip()
-        if label:
-            ontology_terms.append(label)
-        for s in info.get("synonyms") or []:
-            s = str(s).strip()
-            if s:
-                ontology_terms.append(s)
-    # dedupe, cap for prompt/fallback
-    _seen_ont: set[str] = set()
-    ontology_terms = [x for x in ontology_terms
-                      if not (x.casefold() in _seen_ont or _seen_ont.add(x.casefold()))][:24]
+        for a in (c.get("aliases") or []):
+            if not isinstance(a, dict):
+                continue
+            if a.get("confirmed") or float(a.get("confidence") or 0) >= 0.85:
+                term = str(a.get("term") or "").strip()
+                if term and term.casefold() not in [x.casefold() for x in alias_terms]:
+                    alias_terms.append(term)
+    alias_terms = alias_terms[:12]
     terms: list[str] = []
     try:
         from app.harvest.llm import available as llm_available, chat
@@ -526,8 +523,8 @@ def expand_queries(profile: dict, state: dict,
                           f"tissue={profile.get('tissue') or 'any'}, "
                           f"modalities={','.join(profile.get('modalities') or []) or 'any'}. "
                           "Include dataset/omics wording variants. Use these "
-                          "ontology-verified terms/synonyms verbatim where relevant "
-                          f"(do not invent replacements): {', '.join(ontology_terms[:18])}."
+                          "web-verified aliases verbatim where relevant: "
+                          f"{', '.join(alias_terms[:10])}."
                           f"{rctx}"}],
                         model=None, timeout=45)
             text = ""
@@ -542,7 +539,7 @@ def expand_queries(profile: dict, state: dict,
     except Exception as exc:  # noqa: BLE001
         logger.warning("query expansion failed: %s", exc)
     fallback = [topic]
-    fallback += ontology_terms[:8]
+    fallback += alias_terms[:8]
     fallback += [str(k) for k in (profile.get("keywords") or [])[:4]]
     for m in (profile.get("modalities") or [])[:2]:
         fallback.append(f"{topic} {m.replace('_', ' ')}")

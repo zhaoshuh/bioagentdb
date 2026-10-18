@@ -420,9 +420,12 @@ def save_profile(topic: str = "", organism: str = "", tissue: str = "",
     profile = dict(state.get("profile") or {})
     topic = (topic or "").strip()
     if topic:
+        old_topic = str(profile.get("topic") or profile.get("disease") or "")
+        if old_topic and topic.casefold() != old_topic.casefold():
+            # A new spelling/full name invalidates web aliases resolved for the old label.
+            profile.pop("concepts", None)
         profile["topic"] = topic[:140]
-        if not profile.get("disease"):
-            profile["disease"] = topic[:140]
+        profile["disease"] = topic[:140]
     if organism.strip():
         profile["organism"] = organism.strip()[:80]
     if tissue.strip():
@@ -443,12 +446,6 @@ def save_profile(topic: str = "", organism: str = "", tissue: str = "",
                 profile["concepts"] = [c for c in parsed if isinstance(c, dict)][:12]
         except Exception:  # noqa: BLE001
             logger.warning("invalid concepts_json ignored")
-    try:
-        from app.chat import ontology
-
-        profile = ontology.enrich_profile(profile)
-    except Exception:  # noqa: BLE001
-        logger.warning("ontology enrichment failed", exc_info=True)
     _update_state(sid, profile=profile, profile_ready=bool(ready),
                   ming_ready=bool(ready))
     return {"ok": True, "ready": bool(ready), "profile": profile}
@@ -470,6 +467,17 @@ def run_research(config: RunnableConfig | None = None) -> dict:
     topic = str(profile.get("topic") or profile.get("disease") or "").strip()
     if not topic:
         return {"ok": False, "error": "profile missing; call save_profile(ready=true) first"}
+    try:
+        from app.chat import web_research
+
+        profile, unresolved = web_research.resolve_profile(profile, max_concepts=3)
+        _update_state(sid, profile=profile)
+        if unresolved:
+            return {"ok": False, "needs_confirmation": unresolved,
+                    "message": "Ask the user which meaning they intend before searching: "
+                               + " | ".join(u.get("question", "") for u in unresolved)}
+    except Exception:  # noqa: BLE001
+        logger.warning("alias resolution failed; continuing with user label", exc_info=True)
     writer = get_stream_writer()
     message = str(state.get("research_message") or topic)
     report = None
@@ -531,9 +539,9 @@ Rules:
    essentials: organism/system, technique/omics emphasis, or a too-vague topic.
    Accept "any" or "skip" as a complete answer.
 2. Never invent accessions, paper counts or datasets. This step is planning only.
-3. Use full, ontology-style names for topic/organism/tissue (for example
+3. Use full names for topic/organism/tissue (for example
    'amyotrophic lateral sclerosis', not 'ALS'); put abbreviations and extra
-   facets in concepts_json. Do not invent synonyms.
+   facets in concepts_json. Do not invent synonyms; aliases will be resolved online.
 4. When the topic is clear enough (even if the user skipped details), call
    save_profile(topic=..., organism=..., tissue=..., modalities=[...], concepts_json='[{"type":"disease|modality|tissue|organism|topic","label":"..."}]', ready=true)
    exactly once, then reply with exactly: "Here is the mining plan."
@@ -606,6 +614,21 @@ def stream_ming(sid: str, message: str):
     payload = None
     if ready and topic:
         try:
+            from app.chat import web_research
+
+            profile, unresolved = web_research.resolve_profile(profile, max_concepts=2)
+            _update_state(sid, profile=profile)
+            if unresolved:
+                q = unresolved[0].get("question") or "Which meaning do you intend?"
+                _add_message(sid, "assistant", q, {"kind": "clarify"})
+                _update_state(sid, ming_ready=False)
+                yield _sse({"event": "clarify", "text": q,
+                            "options": unresolved[0].get("candidates") or []})
+                yield _sse({"event": "done"})
+                return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ming alias resolution failed: %s", exc)
+        try:
             payload = ming_mod._proposal(topic, profile)
         except Exception as exc:  # noqa: BLE001
             logger.warning("ming proposal failed: %s", exc)
@@ -630,15 +653,17 @@ Rules:
 1. Ask at most two clarifying questions total, one at a time, only for missing
    essentials: topic/disease, organism/system, technique/omics or sample constraints.
    Accept "any" or "skip" as complete.
-2. Use full, ontology-style names for topic/organism/tissue (for example
+2. Use full names for topic/organism/tissue (for example
    'amyotrophic lateral sclerosis', not 'ALS'); put abbreviations and extra
    facets in concepts_json as [{"type":"disease|modality|tissue|organism|topic",
-   "label":"...","parent":"optional"}]. Do not invent synonyms.
+   "label":"...","parent":"optional"}]. Do not invent synonyms; aliases will be resolved online.
 3. When the topic is clear enough, call save_profile(topic=..., organism=...,
    tissue=..., modalities=[...], concepts_json='[...]', ready=true) exactly once.
 3. Then call run_research() exactly once. It streams step/progress and the final
    report; do NOT invent accessions or counts.
-4. After run_research returns, reply in 2-3 sentences using only its counts.
+4. If run_research returns needs_confirmation, ask the user which meaning they intend
+   (one short question), then call save_profile with their full name and run_research again.
+5. After run_research returns, reply in 2-3 sentences using only its counts.
 5. For a new refinement after a report, update the profile and call run_research again.
 6. Refuse unrelated/non-biomedical requests briefly.
 """
