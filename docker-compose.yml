@@ -18,6 +18,11 @@ services:
       BIOAGENTDB_HOST: 0.0.0.0
       BIOAGENTDB_PORT: "8000"
       BIOAGENTDB_DATA_DIR: /app/data
+      # L-0393: optional demo overlay via shell env (empty = defaults):
+      #   BIOAGENTDB_DB_PATH=/app/data/bioagentdb-v16.sqlite3 (released snapshot)
+      #   BIOAGENTDB_PUBLIC_DEMO=1 (read-only guard, chat/search/export only)
+      BIOAGENTDB_DB_PATH: ${BIOAGENTDB_DB_PATH:-}
+      BIOAGENTDB_PUBLIC_DEMO: ${BIOAGENTDB_PUBLIC_DEMO:-0}
     ports:
       - "8000:8000"
     volumes:

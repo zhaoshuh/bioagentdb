@@ -64,7 +64,8 @@ def cache_path(source: str, key: str) -> Path:
 
 
 def cached_request(source: str, method: str, url: str, *, params=None, headers=None,
-                   json_body=None, use_cache: bool = True) -> Any:
+                   json_body=None, use_cache: bool = True,
+                   timeout: float | None = None, retries: int = 2) -> Any:
     """HTTP（直连优先→代理兜底）+ 磁盘缓存（只缓存 200 的 JSON）。"""
     key = json.dumps({"m": method, "u": url, "p": params, "j": json_body},
                      sort_keys=True, ensure_ascii=False)
@@ -75,7 +76,7 @@ def cached_request(source: str, method: str, url: str, *, params=None, headers=N
         except Exception:  # noqa: BLE001
             pass
     resp = utils._request(method, url, params=params, headers=headers,
-                          json_body=json_body, retries=2)
+                          json_body=json_body, retries=retries, timeout=timeout)
     if resp is None or resp.status_code != 200:
         return None
     try:

@@ -583,8 +583,10 @@ def _adapters():
     from app.sources.europepmc import EuropePmcAdapter, PreprintsAdapter
     from app.sources.openalex import OpenAlexAdapter
     from app.sources.pubmed import PubMedAdapter
-    return [EuropePmcAdapter(), OpenAlexAdapter(), CoreAdapter(), PubMedAdapter(),
-            PreprintsAdapter()]
+    # L-0393: fast sources first — a slow CORE must not exhaust the budget for
+    # PubMed/preprints (observed: CORE 195 s, PubMed+preprints skipped).
+    return [EuropePmcAdapter(), OpenAlexAdapter(), PubMedAdapter(),
+            PreprintsAdapter(), CoreAdapter()]
 
 
 def search_sources(profile: dict, queries: list[str],

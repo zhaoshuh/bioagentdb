@@ -586,8 +586,18 @@ def export_csv(*, q: str = "", theme: str = "", modality: str = "", organism: st
                  LEFT JOIN dataset_papers dp ON dp.dataset_id = d.id
                  LEFT JOIN papers p ON p.id = dp.paper_id
                  LEFT JOIN evidence e ON e.dataset_id = d.id AND e.paper_id = p.id
-                 """ + wsql + " ORDER BY d.updated_at DESC", args).fetchall()
+                 """ + wsql +
+            " ORDER BY d.updated_at DESC,"
+            " CASE WHEN dp.role = 'primary' THEN 0 ELSE 1 END,"
+            " (e.quote IS NULL), p.year DESC, e.zone", args).fetchall()
+    seen: set[str] = set()
     for r in rows:
+        # The paper/evidence joins are one-to-many: keep exactly one row per dataset
+        # (prefer the primary paper that carries an evidence quote) so that
+        # "export = current filtered result" holds row-for-row.
+        if r["id"] in seen:
+            continue
+        seen.add(r["id"])
         w.writerow([r["fingerprint"], r["title"], r["description"], r["modality"],
                     r["organism"], r["tissue"], r["disease"], r["platform"],
                     r["sample_count"], r["status"], r["confidence"], r["repository"],

@@ -56,7 +56,7 @@ async def _public_demo_guard(request, call_next):
             "POST", "PUT", "PATCH", "DELETE"):
         path = request.url.path
         read_only = {"/api/health/check", "/api/datasets/export", "/api/records",
-                     "/api/datasets", "/api/papers"}
+                     "/api/datasets", "/api/papers", "/api/mining/analyze"}
         allowed = path.startswith("/api/chat") or path in read_only
         if not allowed:
             return JSONResponse({"detail": "disabled in public demo mode"}, status_code=403)

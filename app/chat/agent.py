@@ -98,6 +98,7 @@ class ChatSession:
         self.history: list[dict] = []
         self.pending: dict | None = None
         self.last_order: str | None = None
+        self.last_search: dict | None = None
 
     # ------------------------------------------------------------- intent
     def parse(self, message: str) -> dict:
@@ -187,13 +188,88 @@ class ChatSession:
             return self._start_order()
         self.pending = None  # 新话题到来，作废旧提案
 
+        # 1b) 短计数追问（"how many are there?" / "how many datasets?"）：
+        # 不经过 LLM 意图分类，直接用上一轮结果或目录总数作答（L-0393）。
+        short_count = re.fullmatch(
+            r"\s*(?:and\s+)?(?:how many|how much|count)"
+            r"(?:\s+(?:datasets?|records?|papers?|results?|are there|in total|total))*"
+            r"[\s?.!]*", message, re.I)
+        if short_count:
+            if self.last_search:
+                ls = self.last_search
+                return {
+                    "kind": "text",
+                    "text": f"The last search for {ls['label']} found {ls['total']} "
+                            f"paper(s) with data"
+                            + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
+                            + ". Name a disease, tissue or technique to narrow.",
+                }
+            s = store.stats()
+            return {
+                "kind": "text",
+                "text": f"The catalog currently holds {s['datasets_total']:,} dataset "
+                        f"records ({s['datasets_verified']:,} verified) from "
+                        f"{s['papers_total']:,} papers ({s['papers_with_data']:,} with data).",
+            }
+
         intent = self.parse(message)
         self.history.append({"role": "assistant",
                              "content": f"[intent] {json.dumps(intent, ensure_ascii=False)}"})
         kind = intent["kind"]
 
-        # 2) 闲聊
+        # 2a) 计数型追问：LLM 可能把 "how many are there?" 判成 biomedical；
+        # 只要没有新的疾病/主题，就用上一轮检索结果或目录总数作答（L-0393）。
+        count_q = re.search(r"\b(how many|how much|count|number of)\b", message, re.I)
+        follow_shape = (len(message.split()) <= 4
+                        or bool(re.search(r"\b(there|them|those|these|that|results?)\b",
+                                          message, re.I)))
+        if (count_q and follow_shape and not intent.get("disease")
+                and kind in ("chatty", "biomedical")):
+            if self.last_search:
+                ls = self.last_search
+                return {
+                    "kind": "text",
+                    "text": f"The last search for {ls['label']} found {ls['total']} "
+                            f"paper(s) with data"
+                            + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
+                            + ". Name a disease, tissue or technique to narrow.",
+                }
+            s = store.stats()
+            return {
+                "kind": "text",
+                "text": f"The catalog currently holds {s['datasets_total']:,} dataset "
+                        f"records ({s['datasets_verified']:,} verified) from "
+                        f"{s['papers_total']:,} papers ({s['papers_with_data']:,} with data).",
+            }
+
+        # 2) 闲聊 / 追问
         if kind == "chatty":
+            if re.search(r"\b(how many|how much|count|number of)\b", message, re.I):
+                if self.last_search:
+                    ls = self.last_search
+                    return {
+                        "kind": "text",
+                        "text": f"The last search for {ls['label']} found {ls['total']} "
+                                f"paper(s) with data"
+                                + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
+                                + ". Name a disease, tissue or technique to narrow.",
+                    }
+                s = store.stats()
+                return {
+                    "kind": "text",
+                    "text": f"The catalog currently holds {s['datasets_total']:,} dataset "
+                            f"records ({s['datasets_verified']:,} verified) from "
+                            f"{s['papers_total']:,} papers ({s['papers_with_data']:,} with data).",
+                }
+            if self.last_search and re.search(r"\b(more|those|these|them|that|results?)\b",
+                                              message, re.I):
+                ls = self.last_search
+                return {
+                    "kind": "text",
+                    "text": f"Still on {ls['label']}: {ls['total']} paper(s) with data. "
+                            "Name a disease, tissue or technique to narrow, or start a mining "
+                            "task if something is missing.",
+                }
             return {
                 "kind": "text",
                 "text": "I'm the BioAgentDB retrieval agent. I search a catalog of public omics "
@@ -219,11 +295,14 @@ class ChatSession:
         items = result["items"]
         label = intent["name"]
         if items:
+            self.last_search = {"label": label, "total": result["total"],
+                                "query": intent["query"], "slug": intent["slug"]}
+            matched = (f" matching \u201c{intent['query']}\u201d"
+                       if intent["query"] and not result.get("relaxed") else "")
             return {
                 "kind": "records",
                 "theme": intent["slug"],
-                "text": f"{result['total']} paper(s) with data for {label}"
-                        + (f" matching \u201c{intent['query']}\u201d" if intent["query"] else "")
+                "text": f"{result['total']} paper(s) with data for {label}{matched}"
                         + ". Showing the top matches with their evidence and data links.",
                 "records": items,
                 "total": result["total"],
@@ -406,13 +485,34 @@ class ChatSession:
         }
 
     def _search(self, intent: dict) -> dict:
-        return store.list_records(
-            q=intent["query"],
-            theme="" if intent["is_new"] else intent["slug"],
-            modality=(intent["modality"] or [""])[0] if intent["modality"] else "",
-            organism=intent["organism"],
-            limit=6, offset=0, sort="year",
-        )
+        """Progressive relaxation: a verbose LLM query (e.g. 'Alzheimer proteomics
+        brain CSF datasets') must not turn a populated theme into 'no matches'.
+        Try the full query, then theme+modality, then theme, then disease name."""
+        modality = (intent["modality"] or [""])[0] if intent["modality"] else ""
+        theme = "" if intent["is_new"] else intent["slug"]
+        attempts = [
+            dict(q=intent["query"], theme=theme, modality=modality,
+                 organism=intent["organism"]),
+            dict(q="", theme=theme, modality=modality, organism=intent["organism"]),
+            dict(q="", theme=theme, modality=modality, organism=""),
+            dict(q="", theme=theme, modality="", organism=""),
+            dict(q=intent.get("disease") or "", theme="", modality=modality, organism=""),
+            dict(q=intent.get("name") or "", theme="", modality="", organism=""),
+        ]
+        seen: set[tuple] = set()
+        last: dict | None = None
+        for i, kw in enumerate(attempts):
+            key = tuple(sorted(kw.items()))
+            if key in seen:
+                continue
+            seen.add(key)
+            last = store.list_records(limit=6, offset=0, sort="year", **kw)
+            if last["items"]:
+                last["relaxed"] = i > 0
+                return last
+        if last is not None:
+            last["relaxed"] = True
+        return last or store.list_records(limit=6, offset=0, sort="year", theme=theme)
 
 
 _sessions: dict[str, ChatSession] = {}
