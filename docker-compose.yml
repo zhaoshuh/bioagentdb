@@ -28,19 +28,12 @@ services:
       HTTP_PROXY: ${BIOAGENTDB_CONTAINER_PROXY:-}
       HTTPS_PROXY: ${BIOAGENTDB_CONTAINER_PROXY:-}
       NO_PROXY: localhost,127.0.0.1,sandbox
-      # Optional isolated code sandbox (BaseSandbox sidecar)
-      BIOAGENTDB_SANDBOX: ${BIOAGENTDB_SANDBOX:-}
-      SANDBOX_URL: ${SANDBOX_URL:-http://sandbox:9000}
-      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-}
     ports:
       - "8000:8000"
     volumes:
       - ./:/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - default
-      - sandboxnet
     command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
     restart: unless-stopped
 
@@ -82,31 +75,3 @@ services:
       - app
     restart: unless-stopped
     profiles: ["mining"]
-
-  # L-0404: isolated code-execution sandbox used by DeepAgents BaseSandbox.
-  # No host mounts, no repo/secrets, internal network only.
-  sandbox:
-    image: python:3.12-slim
-    container_name: bioagentdb-sandbox
-    command: ["python", "/server.py"]
-    environment:
-      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-}
-      PYTHONDONTWRITEBYTECODE: "1"
-    volumes:
-      - ./deploy/sandbox_server.py:/server.py:ro
-    tmpfs:
-      - /workspace:size=256m
-      - /tmp:size=64m
-    read_only: true
-    mem_limit: 512m
-    cpus: 1.0
-    pids_limit: 128
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - sandboxnet
-    restart: unless-stopped
-
-networks:
-  sandboxnet:
-    internal: true
