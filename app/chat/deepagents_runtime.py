@@ -9,7 +9,6 @@ import contextvars
 import json
 import logging
 import os
-import re
 import uuid
 from typing import Any
 
@@ -93,6 +92,32 @@ def _model():
         temperature=0,
         timeout=180,
     )
+
+
+_SANDBOX = None
+
+
+def _sandbox_backend():
+    """Return a DeepAgents BaseSandbox backend if the sidecar is configured."""
+    global _SANDBOX
+    if _SANDBOX is not None:
+        return _SANDBOX
+    mode = os.environ.get("BIOAGENTDB_SANDBOX", "").strip().lower()
+    url = os.environ.get("SANDBOX_URL", "").strip()
+    if mode not in ("remote", "docker", "base") or not url:
+        return None
+    try:
+        from app.chat.sandbox_backend import RemoteSandbox
+
+        sandbox = RemoteSandbox(url, os.environ.get("SANDBOX_TOKEN", ""))
+        if not sandbox.health():
+            logger.warning("sandbox sidecar unreachable at %s; using StateBackend", url)
+            return None
+        _SANDBOX = sandbox
+        return sandbox
+    except Exception:  # noqa: BLE001
+        logger.warning("sandbox backend unavailable; using StateBackend", exc_info=True)
+        return None
 
 
 def _saver():
@@ -260,6 +285,9 @@ Rules:
 4. Be concise (2-4 sentences). Mention the number of matching papers when known.
 5. When the user asks "how many" about a previous search, use the tool result in
    the conversation; do not guess.
+6. A sandboxed `execute` tool may be available. Use it for calculations or data
+   processing needed for catalog answers (e.g., percentages); it has no network
+   and no access to app secrets.
 """
 
 
@@ -282,6 +310,7 @@ def _ask_agent():
             tools=[catalog_stats, search_records, propose_mining, task_status],
             system_prompt=_ASK_PROMPT,
             middleware=[_summarizer(model)],
+            backend=_sandbox_backend(),
             checkpointer=_saver(),
         )
     return _ASK_AGENT
@@ -315,24 +344,6 @@ def stream_ask(message: str, session_id: str | None):
     if state.get("pending_ask"):
         _PENDING[sid] = state["pending_ask"]
     _CURRENT_SID.set(sid)
-
-    short_count = re.fullmatch(
-        r"\s*(?:and\s+)?(?:how many|how much|count)"
-        r"(?:\s+(?:datasets?|records?|papers?|results?|are there|in total|total))*"
-        r"[\s?.!]*", message, re.I)
-    if short_count:
-        from app.catalog import store
-
-        s = store.stats()
-        text = (f"The catalog currently holds {s['datasets_total']:,} dataset records "
-                f"({s['datasets_verified']:,} verified) from {s['papers_total']:,} papers "
-                f"({s['papers_with_data']:,} with data).")
-        for i in range(0, len(text), 12):
-            yield _sse({"type": "token", "text": text[i:i + 12]})
-        _add_message(sid, "assistant", text, {"kind": "text"})
-        yield _sse({"type": "meta", "session_id": sid, "kind": "text"})
-        yield _sse({"type": "done"})
-        return
 
     tokens: list[str] = []
     final_text = ""
@@ -562,6 +573,7 @@ def _ming_agent():  # shared intent core, Ming mode
             tools=[save_profile],
             system_prompt=_MING_PROMPT,
             middleware=[_summarizer(model)],
+            backend=_sandbox_backend(),
             checkpointer=_saver(),
         )
     return _MING_AGENT
@@ -680,6 +692,7 @@ def _research_agent():
             tools=[save_profile, run_research],
             system_prompt=_RESEARCH_PROMPT,
             middleware=[_summarizer(model)],
+            backend=_sandbox_backend(),
             checkpointer=_saver(),
         )
     return _RESEARCH_AGENT
