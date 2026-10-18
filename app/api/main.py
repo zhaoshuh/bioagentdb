@@ -330,6 +330,11 @@ def theme_unhide(slug: str):
 def chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(400, "message required")
+    from app.chat import deepagents_runtime as da
+
+    if da.enabled():
+        return StreamingResponse(da.stream_ask(req.message, req.session_id),
+                                 media_type="text/event-stream")
     from app.chat.agent import get_session
 
     def gen():
@@ -370,6 +375,10 @@ class ChatConfirm(BaseModel):
 
 @app.post("/api/chat/confirm")
 def chat_confirm(req: ChatConfirm):
+    from app.chat import deepagents_runtime as da
+
+    if da.enabled():
+        return da.confirm_ask(req.session_id)
     from app.chat.agent import confirm_order
 
     result = confirm_order(req.session_id)
@@ -426,6 +435,12 @@ def wb_message(sid: str, body: WorkbenchMessage):
 
     def gen():
         if (sess.get("kind") or "research") == "ming":
+            from app.chat import deepagents_runtime as da
+
+            if da.enabled():
+                for raw in da.stream_ming(sid, body.message):
+                    yield raw
+                return
             from app.chat import ming
 
             for ev in ming.run_turn(sid, body.message):

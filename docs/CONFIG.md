@@ -139,3 +139,13 @@ sha256 `15C067D8…94958`，release 档由 `deploy/bootstrap.py` 装载进 `depl
 release=8083 v1.6 冻结对齐。一步准备 + 一键起：`python deploy/bootstrap.py` →
 `docker compose -f deploy/compose.preview.yml up -d`（详见 `deploy/README.md`、`docs/QUICKSTART.md`、
 第三方十步 `docs/SELF-HOST.md`）。
+
+## 六、Agent 运行时（L-0396）
+
+| 键（env） | 默认 | 说明 |
+|---|---|---|
+| `BIOAGENTDB_AGENT_IMPL` | `deepagents`（依赖已装且配置了 `DEEPSEEK_API_KEY`）| `deepagents` = DeepAgents 0.7.x：工具调用 + 自动摘要（24k tokens 触发、保留最近 12 条消息）；`legacy` = 旧实现 |
+
+- 依赖固定在 `requirements.txt`（`deepagents==0.7.28`、`langchain==1.4.6`、`langgraph==1.2.16`、`langchain-openai==1.7.2`）。
+- 未安装依赖或没有 API key 时**自动回退 legacy**，服务仍可启动；显式 `BIOAGENTDB_AGENT_IMPL=legacy` 可强制旧实现。
+- 会话状态仍写入 `chat_sessions`/`chat_messages`；DeepAgents 的线程 checkpointer 目前是进程内，重启后新线程从库内状态重建。
