@@ -386,26 +386,6 @@ def chat_confirm(req: ChatConfirm):
     return result
 
 
-class ChatApproval(BaseModel):
-    session_id: str
-    decision: str = "approve"          # approve | reject | edit
-    message: str = ""
-    edited_args: dict | None = None
-
-
-@app.post("/api/chat/approve")
-def chat_approve(req: ChatApproval):
-    from app.chat import deepagents_runtime as da
-
-    if not da.enabled():
-        raise HTTPException(400, "DeepAgents is not enabled")
-    if req.decision not in ("approve", "reject", "edit"):
-        raise HTTPException(400, "decision must be approve|reject|edit")
-    return StreamingResponse(
-        da.stream_approval(req.session_id, req.decision, req.message, req.edited_args),
-        media_type="text/event-stream")
-
-
 # ---------------------------------------------------------------- chat workbench (v1.4)
 
 class WorkbenchSessionCreate(BaseModel):
