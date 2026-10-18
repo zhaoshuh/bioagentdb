@@ -32,11 +32,21 @@ class RemoteSandbox(BaseSandbox):
     def _headers(self) -> dict:
         return {"X-Sandbox-Token": self.token} if self.token else {}
 
+    def _session_id(self) -> str:
+        try:
+            from langgraph.config import get_config
+
+            cfg = get_config()
+            return str((cfg or {}).get("configurable", {}).get("thread_id") or "default")
+        except Exception:  # noqa: BLE001
+            return "default"
+
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         try:
             with httpx.Client(timeout=self.timeout, trust_env=False) as client:
                 r = client.post(f"{self.url}/execute",
-                                json={"command": command, "timeout": int(timeout or 30)},
+                                json={"command": command, "timeout": int(timeout or 30),
+                                      "workspace": self._session_id()},
                                 headers=self._headers())
                 r.raise_for_status()
                 data = r.json()
@@ -48,7 +58,8 @@ class RemoteSandbox(BaseSandbox):
                                    exit_code=1, truncated=False)
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
-        payload = {"files": [{"path": path,
+        payload = {"workspace": self._session_id(),
+                   "files": [{"path": path,
                               "content_b64": base64.b64encode(data).decode()}
                              for path, data in files]}
         try:
@@ -62,7 +73,8 @@ class RemoteSandbox(BaseSandbox):
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         try:
             with httpx.Client(timeout=self.timeout, trust_env=False) as client:
-                r = client.post(f"{self.url}/download", json={"paths": paths},
+                r = client.post(f"{self.url}/download",
+                                json={"paths": paths, "workspace": self._session_id()},
                                 headers=self._headers())
                 r.raise_for_status()
                 out = []

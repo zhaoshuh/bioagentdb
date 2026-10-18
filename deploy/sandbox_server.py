@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import pathlib
+import re
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,9 +18,16 @@ TOKEN = os.environ.get("SANDBOX_TOKEN", "")
 MAX_OUTPUT = 100_000
 
 
-def _safe_path(raw: str) -> pathlib.Path:
-    p = (WORKSPACE / str(raw).lstrip("/")).resolve()
-    if WORKSPACE.resolve() not in p.parents and p != WORKSPACE.resolve():
+def _session_dir(raw: str) -> pathlib.Path:
+    sid = re.sub(r"[^A-Za-z0-9_-]+", "", str(raw or ""))[:64] or "default"
+    p = WORKSPACE / "sessions" / sid
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _safe_path(raw: str, workspace: pathlib.Path) -> pathlib.Path:
+    p = (workspace / str(raw).lstrip("/")).resolve()
+    if workspace.resolve() not in p.parents and p != workspace.resolve():
         raise ValueError("path escapes workspace")
     return p
 
@@ -61,10 +69,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/execute":
             cmd = str(data.get("command") or "")
             timeout = min(int(data.get("timeout") or 30), 120)
+            workspace = _session_dir(data.get("workspace") or "")
             env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp",
                    "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
             try:
-                proc = subprocess.run(["sh", "-lc", cmd], cwd=str(WORKSPACE),
+                proc = subprocess.run(["sh", "-lc", cmd], cwd=str(workspace),
                                       capture_output=True, text=True,
                                       timeout=timeout, env=env)
                 out = (proc.stdout or "") + (proc.stderr or "")
@@ -80,10 +89,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/upload":
+            workspace = _session_dir(data.get("workspace") or "")
             results = []
             for item in data.get("files") or []:
                 try:
-                    p = _safe_path(item.get("path") or "")
+                    p = _safe_path(item.get("path") or "", workspace)
                     p.parent.mkdir(parents=True, exist_ok=True)
                     p.write_bytes(base64.b64decode(item.get("content_b64") or ""))
                     results.append({"path": str(item.get("path")), "error": None})
@@ -93,10 +103,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/download":
+            workspace = _session_dir(data.get("workspace") or "")
             results = []
             for raw in data.get("paths") or []:
                 try:
-                    p = _safe_path(raw)
+                    p = _safe_path(raw, workspace)
                     results.append({"path": raw,
                                     "content_b64": base64.b64encode(p.read_bytes()).decode(),
                                     "error": None})

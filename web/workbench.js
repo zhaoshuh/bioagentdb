@@ -765,6 +765,53 @@
     sendBtn.disabled = b; stopBtn.disabled = !b;
   }
 
+  function approvalCard(container, ev, handler) {
+    const items = ev.approvals || [];
+    if (!items.length) return;
+    const a = items[0];
+    const wrap = el("div", "wb-approval");
+    wrap.appendChild(el("div", "wb-note", "Tool approval required: " + (a.name || "tool")));
+    const pre = el("pre", "wb-approval-args", JSON.stringify(a.args || {}, null, 2));
+    wrap.appendChild(pre);
+    const row = el("div", "chips");
+    const resume = async (decision, edited) => {
+      try {
+        const resp = await fetch("/api/chat/approve", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: ev.session_id, decision,
+                                 edited_args: edited || null }),
+        });
+        if (!resp.ok || !resp.body) throw new Error("approval stream failed (" + resp.status + ")");
+        const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+        for (;;) {
+          const { value, done } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+            for (const line of chunk.split("\n")) {
+              if (!line.startsWith("data: ")) continue;
+              let e; try { e = JSON.parse(line.slice(6)); } catch { continue; }
+              handler(e, container);
+            }
+          }
+        }
+      } catch (e) { bubble("error", "Approval failed: " + e.message); }
+    };
+    const mk = (label, fn) => {
+      const b = el("button", "ghost", label); b.onclick = fn; row.appendChild(b);
+    };
+    mk("Approve", () => resume("approve"));
+    mk("Reject", () => resume("reject"));
+    mk("Edit", () => {
+      const cmd = prompt("Edit command", (a.args && a.args.command) || "");
+      if (cmd !== null) resume("edit", Object.assign({}, a.args || {}, { command: cmd }));
+    });
+    wrap.appendChild(row);
+    (container || log).appendChild(wrap);
+    scrollLog();
+  }
+
   function handleEvent(ev, turn) {
     switch (ev.event) {
       case "step":
@@ -801,6 +848,7 @@
         renderResultSets();
         break;
       }
+      case "approval_required": approvalCard(turn, ev, handleEvent); break;
       case "error": bubble("error", ev.message); break;
       case "done": {
         const sec = ((Date.now() - (turn._t0 || Date.now())) / 1000).toFixed(0);
@@ -996,6 +1044,7 @@
     switch (ev.event) {
       case "token": mnlToken(turn, ev.text); break;
       case "proposal": renderMingProposal(turn, ev.proposal || {}); break;
+      case "approval_required": approvalCard(turn, ev, handleMingEvent); break;
       case "error": mnlBubble("error", ev.message || "agent error"); break;
       case "done": {
         const tb = turn.querySelector(".wb-msg.assistant.md");
