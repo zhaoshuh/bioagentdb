@@ -231,8 +231,9 @@ def _request(method: str, url: str, *, params=None, headers=None, json_body=None
 
 
 def get_json(url: str, params: dict | None = None, headers: dict | None = None,
-             retries: int = 2) -> Any:
-    resp = _request("GET", url, params=params, headers=headers, retries=retries)
+             retries: int = 2, timeout: float | None = None) -> Any:
+    resp = _request("GET", url, params=params, headers=headers, retries=retries,
+                    timeout=timeout)
     if resp is None or resp.status_code != 200:
         return None
     try:

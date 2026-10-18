@@ -294,11 +294,6 @@ def _tool_events(name: str, content: str, sid: str = "") -> list[dict]:
         return []
     events: list[dict] = []
     if name == "search_records" and isinstance(payload, dict):
-        if sid:
-            _update_state(sid, last_search={"label": payload.get("label") or "",
-                                            "total": payload.get("total") or 0,
-                                            "theme": payload.get("theme") or "",
-                                            "query": ""})
         events.append({"type": "records", "theme": payload.get("theme") or "",
                        "total": payload.get("total") or 0,
                        "records": (payload.get("items") or [])[:6]})
@@ -326,17 +321,12 @@ def stream_ask(message: str, session_id: str | None):
         r"(?:\s+(?:datasets?|records?|papers?|results?|are there|in total|total))*"
         r"[\s?.!]*", message, re.I)
     if short_count:
-        last = state.get("last_search") or {}
-        if last and last.get("total") is not None:
-            text = (f"The last search for {last.get('label') or 'this topic'} found "
-                    f"{int(last.get('total') or 0)} paper(s) with data.")
-        else:
-            from app.catalog import store
+        from app.catalog import store
 
-            s = store.stats()
-            text = (f"The catalog currently holds {s['datasets_total']:,} dataset records "
-                    f"({s['datasets_verified']:,} verified) from {s['papers_total']:,} papers "
-                    f"({s['papers_with_data']:,} with data).")
+        s = store.stats()
+        text = (f"The catalog currently holds {s['datasets_total']:,} dataset records "
+                f"({s['datasets_verified']:,} verified) from {s['papers_total']:,} papers "
+                f"({s['papers_with_data']:,} with data).")
         for i in range(0, len(text), 12):
             yield _sse({"type": "token", "text": text[i:i + 12]})
         _add_message(sid, "assistant", text, {"kind": "text"})
@@ -418,7 +408,8 @@ def confirm_ask(session_id: str) -> dict:
 
 def save_profile(topic: str = "", organism: str = "", tissue: str = "",
                  modalities: list[str] | None = None, keywords: list[str] | None = None,
-                 ready: bool = False, config: RunnableConfig | None = None) -> dict:
+                 concepts_json: str = "", ready: bool = False,
+                 config: RunnableConfig | None = None) -> dict:
     """Save the shared mining/research profile for the current session. Call this
     once the topic is clear (even if the user skipped details), with ready=true.
     Empty fields keep their previous values."""
@@ -445,6 +436,19 @@ def save_profile(topic: str = "", organism: str = "", tissue: str = "",
             if k and k not in old:
                 old.append(k)
         profile["keywords"] = old[:12]
+    if concepts_json.strip():
+        try:
+            parsed = json.loads(concepts_json)
+            if isinstance(parsed, list):
+                profile["concepts"] = [c for c in parsed if isinstance(c, dict)][:12]
+        except Exception:  # noqa: BLE001
+            logger.warning("invalid concepts_json ignored")
+    try:
+        from app.chat import ontology
+
+        profile = ontology.enrich_profile(profile)
+    except Exception:  # noqa: BLE001
+        logger.warning("ontology enrichment failed", exc_info=True)
     _update_state(sid, profile=profile, profile_ready=bool(ready),
                   ming_ready=bool(ready))
     return {"ok": True, "ready": bool(ready), "profile": profile}
@@ -527,8 +531,11 @@ Rules:
    essentials: organism/system, technique/omics emphasis, or a too-vague topic.
    Accept "any" or "skip" as a complete answer.
 2. Never invent accessions, paper counts or datasets. This step is planning only.
-3. When the topic is clear enough (even if the user skipped details), call
-   save_profile(topic=..., organism=..., tissue=..., modalities=[...], ready=true)
+3. Use full, ontology-style names for topic/organism/tissue (for example
+   'amyotrophic lateral sclerosis', not 'ALS'); put abbreviations and extra
+   facets in concepts_json. Do not invent synonyms.
+4. When the topic is clear enough (even if the user skipped details), call
+   save_profile(topic=..., organism=..., tissue=..., modalities=[...], concepts_json='[{"type":"disease|modality|tissue|organism|topic","label":"..."}]', ready=true)
    exactly once, then reply with exactly: "Here is the mining plan."
    Do not ask further questions after ready=true.
 4. Keep replies short (1-3 sentences). Do not ask more than two questions.
@@ -623,8 +630,12 @@ Rules:
 1. Ask at most two clarifying questions total, one at a time, only for missing
    essentials: topic/disease, organism/system, technique/omics or sample constraints.
    Accept "any" or "skip" as complete.
-2. When the topic is clear enough, call save_profile(topic=..., organism=...,
-   tissue=..., modalities=[...], ready=true) exactly once.
+2. Use full, ontology-style names for topic/organism/tissue (for example
+   'amyotrophic lateral sclerosis', not 'ALS'); put abbreviations and extra
+   facets in concepts_json as [{"type":"disease|modality|tissue|organism|topic",
+   "label":"...","parent":"optional"}]. Do not invent synonyms.
+3. When the topic is clear enough, call save_profile(topic=..., organism=...,
+   tissue=..., modalities=[...], concepts_json='[...]', ready=true) exactly once.
 3. Then call run_research() exactly once. It streams step/progress and the final
    report; do NOT invent accessions or counts.
 4. After run_research returns, reply in 2-3 sentences using only its counts.

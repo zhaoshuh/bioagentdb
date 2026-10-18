@@ -98,7 +98,6 @@ class ChatSession:
         self.history: list[dict] = []
         self.pending: dict | None = None
         self.last_order: str | None = None
-        self.last_search: dict | None = None
 
     # ------------------------------------------------------------- intent
     def parse(self, message: str) -> dict:
@@ -188,30 +187,6 @@ class ChatSession:
             return self._start_order()
         self.pending = None  # 新话题到来，作废旧提案
 
-        # 1b) 短计数追问（"how many are there?" / "how many datasets?"）：
-        # 不经过 LLM 意图分类，直接用上一轮结果或目录总数作答（L-0393）。
-        short_count = re.fullmatch(
-            r"\s*(?:and\s+)?(?:how many|how much|count)"
-            r"(?:\s+(?:datasets?|records?|papers?|results?|are there|in total|total))*"
-            r"[\s?.!]*", message, re.I)
-        if short_count:
-            if self.last_search:
-                ls = self.last_search
-                return {
-                    "kind": "text",
-                    "text": f"The last search for {ls['label']} found {ls['total']} "
-                            f"paper(s) with data"
-                            + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
-                            + ". Name a disease, tissue or technique to narrow.",
-                }
-            s = store.stats()
-            return {
-                "kind": "text",
-                "text": f"The catalog currently holds {s['datasets_total']:,} dataset "
-                        f"records ({s['datasets_verified']:,} verified) from "
-                        f"{s['papers_total']:,} papers ({s['papers_with_data']:,} with data).",
-            }
-
         intent = self.parse(message)
         self.history.append({"role": "assistant",
                              "content": f"[intent] {json.dumps(intent, ensure_ascii=False)}"})
@@ -225,15 +200,6 @@ class ChatSession:
                                           message, re.I)))
         if (count_q and follow_shape and not intent.get("disease")
                 and kind in ("chatty", "biomedical")):
-            if self.last_search:
-                ls = self.last_search
-                return {
-                    "kind": "text",
-                    "text": f"The last search for {ls['label']} found {ls['total']} "
-                            f"paper(s) with data"
-                            + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
-                            + ". Name a disease, tissue or technique to narrow.",
-                }
             s = store.stats()
             return {
                 "kind": "text",
@@ -245,30 +211,12 @@ class ChatSession:
         # 2) 闲聊 / 追问
         if kind == "chatty":
             if re.search(r"\b(how many|how much|count|number of)\b", message, re.I):
-                if self.last_search:
-                    ls = self.last_search
-                    return {
-                        "kind": "text",
-                        "text": f"The last search for {ls['label']} found {ls['total']} "
-                                f"paper(s) with data"
-                                + (f" matching \u201c{ls['query']}\u201d" if ls.get("query") else "")
-                                + ". Name a disease, tissue or technique to narrow.",
-                    }
                 s = store.stats()
                 return {
                     "kind": "text",
                     "text": f"The catalog currently holds {s['datasets_total']:,} dataset "
                             f"records ({s['datasets_verified']:,} verified) from "
                             f"{s['papers_total']:,} papers ({s['papers_with_data']:,} with data).",
-                }
-            if self.last_search and re.search(r"\b(more|those|these|them|that|results?)\b",
-                                              message, re.I):
-                ls = self.last_search
-                return {
-                    "kind": "text",
-                    "text": f"Still on {ls['label']}: {ls['total']} paper(s) with data. "
-                            "Name a disease, tissue or technique to narrow, or start a mining "
-                            "task if something is missing.",
                 }
             return {
                 "kind": "text",
@@ -295,8 +243,6 @@ class ChatSession:
         items = result["items"]
         label = intent["name"]
         if items:
-            self.last_search = {"label": label, "total": result["total"],
-                                "query": intent["query"], "slug": intent["slug"]}
             matched = (f" matching \u201c{intent['query']}\u201d"
                        if intent["query"] and not result.get("relaxed") else "")
             return {
