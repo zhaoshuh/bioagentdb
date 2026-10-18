@@ -172,7 +172,7 @@ def build_github(out: Path) -> Path:
             copy(src, gh / tree)
     dep = gh / "deploy"
     dep.mkdir(parents=True, exist_ok=True)
-    for name in ("compose.preview.yml", "README.md", "bootstrap.py", "sandbox_server.py"):
+    for name in ("compose.preview.yml", "README.md", "bootstrap.py"):
         copy(ROOT / "deploy" / name, dep / name)
     n_scripts = 0
     for f in sorted((ROOT / "scripts").glob("*.py")):
