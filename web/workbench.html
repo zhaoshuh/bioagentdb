@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>BioAgentDB — Ask the agent</title>
+<title>BioAgentDB — Discovery workbench</title>
 <link rel="stylesheet" href="/styles.css"/>
-<link rel="stylesheet" href="/workbench.css?v=8"/>
+<link rel="stylesheet" href="/workbench.css?v=11"/>
 </head>
 <body class="wb">
 <header class="wb-top">
-  <a class="wb-brand" href="/workbench.html">BioAgentDB</a>
+  <a class="wb-brand" href="/">BioAgentDB</a>
   <nav class="wb-nav">
-    <a href="/guide.html#g-what">Topics</a>
-    <a href="/guide.html#g-ask">Method</a>
-    <a href="/guide.html#g-record">Records</a>
-    <a class="active" href="/workbench.html">Ask the agent</a>
-    <a href="/mining.html">My mining</a>
-    <a href="/guide.html">Guide</a>
+    <a href="/topics">Topics</a>
+    <a href="/method">Method</a>
+    <a href="/records">Records</a>
+    <a class="active" href="/workbench">Workbench</a>
+    <a href="/mining">My mining</a>
+    <a href="/guide">Guide</a>
   </nav>
   <span class="wb-live" id="wb-live">discovery workbench · live sources + catalog</span>
 </header>
@@ -41,7 +41,7 @@
         <textarea id="wb-input" rows="2"
           placeholder='e.g. "single-nucleus RNA-seq of human brain in Alzheimer disease, at least 20 samples"'></textarea>
         <div class="wb-actions">
-          <button id="wb-send" class="wb-btn primary">Ask</button>
+          <button id="wb-send" class="wb-btn primary">Send</button>
           <button id="wb-stop" class="wb-btn" disabled>Stop</button>
         </div>
       </div>
@@ -68,7 +68,7 @@
       </div>
     </div>
     <div id="wb-results" class="wb-results">
-      <p class="wb-empty">Ask a question — catalog records, external candidates and a report
+      <p class="wb-empty">Describe a research need — catalog records, external candidates and a report
         will appear here.</p>
     </div>
   </aside>
@@ -83,6 +83,6 @@
 </div>
 
 <script src="/record-modal.js?v=1"></script>
-<script src="/workbench.js?v=16"></script>
+<script src="/workbench.js?v=46"></script>
 </body>
 </html>

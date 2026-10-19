@@ -93,6 +93,14 @@ body.wb {
 .wb-step.running .dot { background: var(--amber); animation: wbpulse 1s infinite; }
 .wb-step.done .dot { background: var(--teal); }
 .wb-step .detail { color: var(--ink-soft); }
+.wb-statusline { display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--ink-soft); margin: 2px 0 8px; }
+.wb-statusline .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber);
+  animation: wbpulse 1s infinite; }
+.wb-statusline .label { color: var(--ink-soft); }
+.wb-timeline { margin: 2px 0 10px 16px; max-height: 280px; overflow: auto;
+  padding-right: 4px; }
+.wb-timeline .wb-research { margin: 6px 0; }
 @keyframes wbpulse { 50% { opacity: .35; } }
 .wb-profile { margin: 0 0 12px; }
 .wb-intro h2 { font-family: var(--serif); font-size: 24px; margin: 6px 0 8px; }
@@ -129,6 +137,7 @@ body.wb {
   margin-right: 5px; background: var(--paper-deep); color: var(--ink-soft); }
 .wb-badge.ok { background: var(--teal-tint); color: var(--teal-ink); }
 .wb-badge.warn { background: var(--amber-tint); color: var(--amber); }
+.wb-badge.bad { background: #fde8e8; color: #a32626; }
 .wb-badge.mono { font-family: var(--mono); }
 
 /* ---------- v1.5 additions ---------- */
@@ -136,6 +145,7 @@ body.wb {
   color: var(--amber); border-radius: 10px; padding: 9px 12px; font-size: 13px;
   margin: 0 0 12px; }
 .wb-note { color: var(--muted); font-size: 12.5px; margin: 0 0 8px; }
+.wb-note.warn { color: var(--amber); }
 .wb-datasets { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .wb-dshead { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); margin-bottom: 6px; }
@@ -229,6 +239,7 @@ body.wb {
 
 /* paper / dataset toggle */
 .wb-viewbar { display: flex; gap: 6px; margin: 0 0 10px; }
+.wb-dsfilter { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .wb-vbtn { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
   border-radius: 999px; padding: 3px 11px; font-size: 12px; cursor: pointer; }
 .wb-vbtn:hover { border-color: var(--teal-ink); color: var(--teal-ink); }

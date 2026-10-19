@@ -57,7 +57,9 @@ async def _public_demo_guard(request, call_next):
         path = request.url.path
         read_only = {"/api/health/check", "/api/datasets/export", "/api/records",
                      "/api/datasets", "/api/papers", "/api/mining/analyze"}
-        allowed = (path.startswith(("/api/chat", "/api/mining_tasks"))
+        allowed = (path.startswith(("/api/chat/sessions",
+                                     "/api/chat/verify-candidate",
+                                     "/api/mining_tasks"))
                    or path in read_only)
         if not allowed:
             return JSONResponse({"detail": "disabled in public demo mode"}, status_code=403)
@@ -89,11 +91,6 @@ class HarvestRequest(BaseModel):
 
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
-
-
-class ChatRequest(BaseModel):
-    message: str
-    session_id: str | None = None
 
 
 class SettingsPut(BaseModel):
@@ -323,67 +320,6 @@ def theme_unhide(slug: str):
     if not out.get("ok"):
         raise HTTPException(404, out.get("message") or "theme not found")
     return out
-
-
-# ---------------------------------------------------------------- chat (SSE)
-
-@app.post("/api/chat")
-def chat(req: ChatRequest):
-    if not req.message.strip():
-        raise HTTPException(400, "message required")
-    from app.chat import deepagents_runtime as da
-
-    if da.enabled():
-        return StreamingResponse(da.stream_ask(req.message, req.session_id),
-                                 media_type="text/event-stream")
-    from app.chat.agent import get_session
-
-    def gen():
-        try:
-            session = get_session(req.session_id)
-            result = session.turn(req.message)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("chat failed")
-            yield _sse({"type": "token", "text": f"The agent hit an error: {exc}"})
-            yield _sse({"type": "meta", "session_id": req.session_id or ""})
-            yield _sse({"type": "done"})
-            return
-
-        text = result.get("text") or ""
-        for i in range(0, len(text), 8):
-            yield _sse({"type": "token", "text": text[i:i + 8]})
-        kind = result.get("kind")
-        if kind == "records":
-            yield _sse({"type": "records", "theme": result.get("theme"),
-                        "total": result.get("total"), "records": result.get("records", [])[:6]})
-        elif kind == "proposal":
-            yield _sse({"type": "proposal", "proposal": result.get("proposal")})
-        elif kind == "refusal":
-            yield _sse({"type": "refusal", "refusal": result.get("refusal")})
-        elif kind == "clarify":
-            yield _sse({"type": "refusal", "refusal": result.get("refusal")})
-        elif kind == "order":
-            yield _sse({"type": "order", "order": result.get("order")})
-        yield _sse({"type": "meta", "session_id": session.session_id, "kind": kind})
-        yield _sse({"type": "done"})
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
-
-
-class ChatConfirm(BaseModel):
-    session_id: str
-
-
-@app.post("/api/chat/confirm")
-def chat_confirm(req: ChatConfirm):
-    from app.chat import deepagents_runtime as da
-
-    if da.enabled():
-        return da.confirm_ask(req.session_id)
-    from app.chat.agent import confirm_order
-
-    result = confirm_order(req.session_id)
-    return result
 
 
 # ---------------------------------------------------------------- chat workbench (v1.4)
@@ -738,13 +674,34 @@ def paper_figure(name: str):
 
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 def home():
-    # The legacy home page was removed; the agent lives in workbench.html.
-    return RedirectResponse(url="/workbench.html")
+    return FileResponse(str(WEB_DIR / "index.html"), media_type="text/html")
 
 
 @app.api_route("/index.html", methods=["GET", "HEAD"], include_in_schema=False)
 def legacy_home():
-    return RedirectResponse(url="/workbench.html")
+    return FileResponse(str(WEB_DIR / "index.html"), media_type="text/html")
+
+
+@app.api_route("/topics", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/method", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/records", methods=["GET", "HEAD"], include_in_schema=False)
+def public_tab():
+    return FileResponse(str(WEB_DIR / "index.html"), media_type="text/html")
+
+
+@app.api_route("/workbench", methods=["GET", "HEAD"], include_in_schema=False)
+def workbench_alias():
+    return FileResponse(str(WEB_DIR / "workbench.html"), media_type="text/html")
+
+
+@app.api_route("/mining", methods=["GET", "HEAD"], include_in_schema=False)
+def mining_alias():
+    return FileResponse(str(WEB_DIR / "mining.html"), media_type="text/html")
+
+
+@app.api_route("/guide", methods=["GET", "HEAD"], include_in_schema=False)
+def guide_alias():
+    return FileResponse(str(WEB_DIR / "guide.html"), media_type="text/html")
 
 
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

@@ -57,6 +57,10 @@ def extract_da_from_text(text: str, cap: int = 6000) -> str:
     return ""
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
 def datasets_from_text(text: str, *, is_xml: bool) -> tuple[list[dict], bool]:
     """从全文提取数据集公告。
 
@@ -78,6 +82,10 @@ def datasets_from_text(text: str, *, is_xml: bool) -> tuple[list[dict], bool]:
         acc = item["acc"]
         key = acc.upper()
         if key in seen:
+            continue
+        # A bare UUID is a file/download identifier, not a dataset accession;
+        # do not present it as a discoverable dataset.
+        if _UUID_RE.fullmatch(acc):
             continue
         seen.add(key)
         quote = evidence_for(scan_text, acc)
@@ -209,6 +217,34 @@ def _core_work(core_id: str, headers: dict) -> dict | None:
             except Exception:  # noqa: BLE001
                 return None
     return None
+
+
+def cached_fulltext(cand: dict, members: list[dict] | None = None) -> tuple[str, str]:
+    """Return already-downloaded full text without spending a new PDF budget.
+
+    The paper stage caches PMC/preprint/CORE/OpenAlex text; quote context
+    extraction runs after that stage and must not re-download a PDF.  If no
+    cache entry exists, return ("", "none") and let the caller fall back to the
+    Data Availability quote.
+    """
+    pmcid = (cand.get("pmcid") or "").strip()
+    if pmcid:
+        ck = _cache_get("pmc", pmcid)
+        if ck is not None and ck.get("text"):
+            return ck.get("text") or "", ck.get("kind") or "pmc"
+    doi = (cand.get("doi") or "").strip()
+    if doi and cand.get("is_preprint"):
+        ck = _cache_get("preprint", doi)
+        if ck is not None and ck.get("text"):
+            return ck.get("text") or "", ck.get("kind") or "preprint"
+    for m in members or []:
+        src = (m.get("source") or "").lower()
+        sid = str(m.get("source_id") or "").strip()
+        if src in ("core", "openalex") and sid:
+            ck = _cache_get(src, sid)
+            if ck is not None and ck.get("text"):
+                return ck.get("text") or "", ck.get("kind") or src
+    return "", "none"
 
 
 def attach_datasets(candidates: list[dict], members_map: dict[str, list[dict]], *,

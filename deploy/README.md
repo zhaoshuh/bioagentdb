@@ -35,6 +35,7 @@ python deploy/bootstrap.py --check            # 对 8081/8082/8083 做 /api/heal
 
 ```bash
 # bash/zsh
+# 直连（默认）：不设置该变量，或显式留空
 export BIOAGENTDB_CONTAINER_PROXY=
 # 或任意 shell：在 deploy/.env 写一行（.env 已被 gitignore；空值=直连）
 # BIOAGENTDB_CONTAINER_PROXY=

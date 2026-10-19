@@ -18,7 +18,7 @@ import threading
 import time
 
 from app.catalog import store
-from app.chat import paper_datasets, web_research
+from app.chat import paper_datasets, quote_evidence, web_research
 from app.core.db import db, utcnow
 from app.core.relevance import THEME_KEYWORDS
 from app.core.utils import new_id, norm_space
@@ -152,12 +152,18 @@ def list_sessions(limit: int = 30, kind: str | None = None) -> list[dict]:
     with db() as conn:
         if kind in ("research", "ming"):
             rows = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM chat_sessions "
-                "WHERE kind=? ORDER BY updated_at DESC LIMIT ?", (kind, limit)).fetchall()
+                "SELECT id, title, created_at, updated_at, "
+                "(SELECT COUNT(*) FROM chat_messages m WHERE m.session_id=chat_sessions.id "
+                " AND m.role='assistant') AS assistant_count "
+                "FROM chat_sessions WHERE kind=? ORDER BY updated_at DESC LIMIT ?",
+                (kind, limit)).fetchall()
         else:
             rows = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM chat_sessions "
-                "ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+                "SELECT id, title, created_at, updated_at, "
+                "(SELECT COUNT(*) FROM chat_messages m WHERE m.session_id=chat_sessions.id "
+                " AND m.role='assistant') AS assistant_count "
+                "FROM chat_sessions ORDER BY updated_at DESC LIMIT ?",
+                (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -174,12 +180,29 @@ def get_messages(sid: str, limit: int = 200) -> list[dict]:
             (sid, limit)).fetchall()
         rows = rows[::-1]          # 取最近 limit 条，再按插入顺序返回
     out = []
+    state = _state(sid)
+    cached_report = ((state.get("search_cache") or {}).get("report") or {}).get("report") \
+        or state.get("last_report") or {}
     for r in rows:
         d = dict(r)
         try:
             d["meta"] = json.loads(d.get("meta") or "{}")
         except Exception:  # noqa: BLE001
             d["meta"] = {}
+        meta = d["meta"]
+        if (d.get("role") == "assistant" and isinstance(meta, dict)
+                and meta.get("kind") == "report" and not meta.get("report")
+                and cached_report):
+            # Older sessions stored only {"kind": "report"}; recover the
+            # structured report from the last search cache for the UI/history.
+            meta["report"] = cached_report
+        if (d.get("role") == "assistant" and isinstance(meta, dict)
+                and meta.get("kind") == "report" and meta.get("report")
+                and not meta.get("summary")):
+            try:
+                meta["summary"] = _final_reply(meta["report"])
+            except Exception:  # noqa: BLE001
+                pass
         out.append(d)
     return out
 
@@ -586,7 +609,13 @@ def search_catalog(profile: dict, limit: int = 12) -> list[dict]:
             "year": it.get("year"),
             "datasets": [{"accession": (d.get("links") or [{}])[0].get("accession", ""),
                           "repository": d.get("repository") or "",
-                          "status": d.get("status") or ""} for d in datasets[:5]],
+                          "status": d.get("status") or "",
+                          "organism": d.get("organism") or "",
+                          "tissue": d.get("tissue") or "",
+                          "modality": d.get("modality") or "",
+                          "modalities": d.get("modalities") or [],
+                          "sample_count": d.get("sample_count"),
+                          "links": d.get("links") or []} for d in datasets],
             "evidence": ev.get("quote") or "",
             "n_datasets": len(datasets),
         })
@@ -806,6 +835,49 @@ def verify_candidate_live(cand: dict) -> dict:
     return out
 
 
+def _run_constraint_stage(profile: dict, catalog: list[dict], candidates: list[dict],
+                          members_map: dict, emit=None) -> tuple[dict, list[dict], dict]:
+    """Extract paper windows, judge them, and match records deterministically.
+
+    The evidence layer is additive: a malformed paper or a quote-judge failure
+    must degrade to unknown, not abort the whole research report.
+    """
+    contexts: list[dict] = []
+    judgments: list[dict] = []
+    try:
+        contexts = quote_evidence.build_quote_contexts(
+            candidates, profile, members_map=members_map)
+        if emit:
+            emit(f"located {len(contexts)} quote context(s) around accessions")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("quote context extraction failed: %s", exc)
+        if emit:
+            emit(f"quote context extraction failed: {type(exc).__name__}")
+    try:
+        judgments = quote_evidence.judge_contexts(contexts, profile)
+        if emit:
+            n_supp = sum(1 for j in judgments
+                         for c in (j.get("constraints") or {}).values()
+                         if c.get("status") == "supported")
+            emit(f"judged {len(judgments)} context(s) · {n_supp} supported constraint(s)")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("quote judging failed: %s", exc)
+        if emit:
+            emit(f"quote judging failed: {type(exc).__name__}")
+    try:
+        report = quote_evidence.match_records(profile, catalog, candidates, judgments)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("constraint matching failed: %s", exc)
+        report = {
+            "requested": quote_evidence.requested_constraints(profile),
+            "records": [], "counts": {},
+            "usage_counts": {},
+            "disclosure": [f"constraint matching failed: {type(exc).__name__}"],
+            "rubric_ok": False,
+        }
+    return {"contexts": contexts, "judgments": judgments}, judgments, report
+
+
 def rubric_check(report: dict) -> dict:
     issues: list[str] = []
     for item in report.get("items", []):
@@ -814,10 +886,28 @@ def rubric_check(report: dict) -> dict:
         if item.get("type") == "candidate":
             item["label"] = "unverified"
             for d in item.get("datasets") or []:
-                if not re.fullmatch(r"[A-Za-z0-9_.:\-]{3,40}", str(d.get("accession") or "")):
-                    issues.append(f"odd accession: {d.get('accession')}")
+                acc = str(d.get("accession") or "")
+                if not (re.fullmatch(r"[A-Za-z0-9_.:\-]{3,60}", acc)
+                        or re.fullmatch(r"10\.\d{4,9}/[^\s]{2,120}", acc, re.I)):
+                    issues.append(f"odd accession: {acc}")
     if len(report.get("items", [])) > TOP_N:
         issues.append("top-n exceeded")
+    cr = report.get("constraint_report") or {}
+    if cr:
+        requested = list(cr.get("requested") or [])
+        if not cr.get("rubric_ok", True):
+            issues.append("a paper record is full-match without verified quote evidence "
+                          "for every requested constraint")
+        for rec in cr.get("records") or []:
+            if rec.get("status") != "full" or rec.get("source_tier") != "paper":
+                continue
+            for k in requested:
+                c = (rec.get("constraints") or {}).get(k) or {}
+                if c.get("status") != "supported" or not c.get("quote"):
+                    issues.append(f"full match lacks {k} quote: {rec.get('accession')}")
+        if any((cr.get("counts") or {}).get(k) for k in ("unknown", "partial", "restricted")):
+            if not cr.get("disclosure"):
+                issues.append("unknown/partial/restricted records are not disclosed")
     report["rubric_issues"] = issues
     report["rubric_ok"] = not issues
     return report
@@ -825,7 +915,8 @@ def rubric_check(report: dict) -> dict:
 
 def build_report(profile: dict, catalog: list[dict], candidates: list[dict],
                  per_source: dict, fulltext_stats: dict,
-                 research: dict | None = None) -> dict:
+                 research: dict | None = None,
+                 constraint_report: dict | None = None) -> dict:
     items = list(catalog[:6])
     for c in candidates[:TOP_N - len(items)]:
         items.append({
@@ -844,6 +935,16 @@ def build_report(profile: dict, catalog: list[dict], candidates: list[dict],
         })
     n_datasets = sum(len(i.get("datasets") or []) for i in items
                      if i.get("type") == "candidate")
+    for it in items:
+        statuses = [str(d.get("match_status") or "") for d in (it.get("datasets") or [])]
+        if "fail" in statuses:
+            it["match_status"] = "fail"
+        elif "restricted" in statuses:
+            it["match_status"] = "restricted"
+        elif "unknown" in statuses or "partial" in statuses:
+            it["match_status"] = "partial"
+        elif statuses:
+            it["match_status"] = "full"
     report = {
         "profile": profile,
         "counts": {"catalog": len(catalog), "candidates": len(candidates),
@@ -851,6 +952,7 @@ def build_report(profile: dict, catalog: list[dict], candidates: list[dict],
         "per_source": per_source,
         "fulltext_stats": fulltext_stats,
         "items": items,
+        "constraint_report": constraint_report or {},
         "relax_suggestion": ("" if (catalog or candidates) else
                              "No matches this round — try relaxing conditions "
                              "(broader keywords, another organism, or drop the technique "
@@ -871,6 +973,33 @@ def build_report(profile: dict, catalog: list[dict], candidates: list[dict],
             "cached": bool(research.get("cached")),
         }
     return rubric_check(report)
+
+
+def write_search_cache(sid: str, profile: dict, catalog: list[dict],
+                       candidates: list[dict], report: dict) -> None:
+    """Persist the same cache shape used by run_turn/run_pipeline.
+
+    The split Research path builds the report in report_worker, so this helper
+    keeps the repeated-query cache stable across retrieval and report workers.
+    """
+    state = _state(sid)
+    state["search_cache"] = {
+        "fp": _fingerprint(profile),
+        "empty": not (catalog or candidates),
+        "report": {
+            "catalog": catalog[:6],
+            "candidates": [{
+                "title": c.get("title") or "", "year": c.get("year"),
+                "sources": json.loads(c.get("sources") or "[]"),
+                "landing_url": c.get("landing_url") or "",
+                "t2": bool(c.get("t2")),
+                "fulltext_kind": c.get("fulltext_kind") or "none",
+                "datasets": c.get("datasets") or [],
+            } for c in candidates[:TOP_N]],
+            "report": report,
+        },
+    }
+    _set_state(sid, state)
 
 
 # ---------------------------------------------------------------- turn
@@ -896,6 +1025,21 @@ def _final_reply(report: dict) -> str:
         ", ".join(str(m).replace("_", " ") for m in (p.get("modalities") or []))) if x)
     lines = [f'Here is what I found for **"{topic}"**' + (f" — {ctx}." if ctx else "."), ""]
 
+    cr = report.get("constraint_report") or {}
+    if cr:
+        counts = cr.get("counts") or {}
+        if cr.get("requested"):
+            bits = [f"full {int(counts.get('full') or 0)}"]
+            bits += [f"{v} {k}" for k, v in counts.items() if k != "full" and v]
+            lines.append("Constraint check: " + ", ".join(bits))
+            if not counts.get("full"):
+                lines.append("No record meets all requested constraints; partial/unknown "
+                             "records are candidates for inspection, not full matches.")
+        for d in (cr.get("disclosure") or [])[:4]:
+            lines.append(f"- {d}")
+        if cr.get("requested"):
+            lines.append("")
+
     res = report.get("research") or {}
     if res.get("search_terms") or res.get("summary"):
         if res.get("summary"):
@@ -912,13 +1056,18 @@ def _final_reply(report: dict) -> str:
         lines.append(f"### Catalog records — verified, with evidence ({len(catalog)})")
         for it in catalog[:8]:
             accs = ", ".join(f"`{d.get('accession')}`"
+                             + (f" ({d.get('match_status')})" if d.get("match_status") else "")
                              for d in (it.get("datasets") or []) if d.get("accession"))
             year = f" ({it['year']})" if it.get("year") else ""
             lines.append(f"- **{it.get('title', '')}**{year}" + (f" — {accs}" if accs else ""))
         lines.append("")
+    elif items:
+        lines.append("### Catalog records — verified, with evidence (0)")
+        lines.append("No catalog record matched; the findings below are external papers.")
+        lines.append("")
     ds_rows = [(d, it) for it in cands for d in (it.get("datasets") or [])]
     if ds_rows:
-        lines.append("### Datasets announced in papers — unverified, from Data Availability "
+        lines.append("### Datasets announced in papers — unverified, quote-checked "
                      f"({len(ds_rows)})")
         for d, it in ds_rows[:8]:
             kind = {"europepmc_fulltext": "EPMC full text", "ncbi_efetch": "PMC (NCBI)",
@@ -929,14 +1078,25 @@ def _final_reply(report: dict) -> str:
             ev = "DA section" if d.get("da_evidence") else kind
             repo = d.get("repository") or "repository"
             title = (it.get("title") or "")[:64]
-            lines.append(f"- `{d.get('accession')}` ({repo}) — from *\"{title}\"* ({ev})")
+            status = d.get("match_status") or "unknown"
+            gaps = d.get("constraint_gaps") or []
+            bad = d.get("constraint_contradictions") or []
+            extra = ""
+            if gaps:
+                extra += f"; missing: {', '.join(gaps)}"
+            if bad:
+                extra += f"; contradicted: {', '.join(bad)}"
+            lines.append(f"- `{d.get('accession')}` ({repo}) — from *\"{title}\"* "
+                         f"({ev}; {status}{extra})")
         lines.append("")
     if cands:
-        lines.append(f"### Papers to inspect — no accession extracted ({len(cands)})")
-        for it in cands[:6]:
-            srcs = ", ".join(SOURCE_LABEL.get(s, s) for s in (it.get("sources") or []))
-            lines.append(f"- {it.get('title', '')} — {srcs}")
-        lines.append("")
+        no_ds = [it for it in cands if not (it.get("datasets") or [])]
+        if no_ds:
+            lines.append(f"### Papers to inspect — no accession extracted ({len(no_ds)})")
+            for it in no_ds[:6]:
+                srcs = ", ".join(SOURCE_LABEL.get(s, s) for s in (it.get("sources") or []))
+                lines.append(f"- {it.get('title', '')} — {srcs}")
+            lines.append("")
 
     lines.append("---")
     attempted = int(ft.get("attempted") or 0)
@@ -1143,6 +1303,19 @@ def run_turn(sid: str, message: str):
                "detail": f"checked {min(VERIFY_MAX, len(candidates))} link(s)",
                "ms": int((time.time() - t_ver) * 1000)}
 
+        yield {"event": "step", "name": "quotes", "status": "start"}
+        t_quo = time.time()
+        evidence_bundle, judgments, constraint_report = yield from _run_phase_with_events(
+            lambda emit: _run_constraint_stage(
+                profile, catalog, candidates, members_map, emit), "quotes",
+            heartbeat_s=5.0)
+        yield {"event": "step", "name": "quotes", "status": "done",
+               "detail": f"{len(evidence_bundle.get('contexts') or [])} quote context(s) · "
+                         + ", ".join(f"{k} {v}" for k, v in
+                                     (constraint_report.get("counts") or {}).items()),
+               "ms": int((time.time() - t_quo) * 1000)}
+        yield {"event": "constraint_report", "constraint_report": constraint_report}
+
         yield {"event": "results", "catalog": catalog[:6],
                "candidates": [{
                    "title": c.get("title") or "", "year": c.get("year"),
@@ -1156,7 +1329,7 @@ def run_turn(sid: str, message: str):
         yield {"event": "step", "name": "report", "status": "start"}
         t_rep = time.time()
         report = build_report(profile, catalog, candidates, per_source, fulltext_stats,
-                              research=research_brief)
+                              research=research_brief, constraint_report=constraint_report)
         yield {"event": "report", "report": report}
         final_text = _final_reply(report)
         for i in range(0, len(final_text), 48):
@@ -1185,11 +1358,16 @@ def run_turn(sid: str, message: str):
         yield {"event": "error", "message": f"{type(exc).__name__}: {exc}"}
     yield {"event": "done"}
 
-def run_pipeline(sid: str, message: str, profile: dict):
+def run_pipeline(sid: str, message: str, profile: dict,
+                 web_brief: dict | None = None,
+                 stop_after_contexts: bool = False,
+                 trace_id: str = ""):
     """Deterministic research pipeline after the profile is ready.
 
-    Yields the same step/progress/results/report events as run_turn and
-    returns the final report dict. No clarify, no assistant message.
+    ``web_brief`` may come from the isolated web_research_worker. When present,
+    this pipeline must not call web search again. ``stop_after_contexts`` is used
+    by research_worker in the decoupled path: it stops after retrieval/context
+    extraction and returns a retrieval artifact; quote/report workers continue.
     """
     state = _state(sid)
     # v1.6（L-0292）：查证信号须在"同画像复用"门之前判定——明示查证不得被缓存短路
@@ -1208,6 +1386,7 @@ def run_pipeline(sid: str, message: str, profile: dict):
 
     # 同轮/同画像复用（空结果 / "search again" / 明示查证 / 该查未查 → 重跑）
     if (cache.get("fp") == fp and cache.get("report") and not cache.get("empty")
+            and not stop_after_contexts
             and not _REFRESH_RE.search(message)
             and not explicit_lookup
             and not (need_research and not cached_research)):
@@ -1228,16 +1407,19 @@ def run_pipeline(sid: str, message: str, profile: dict):
            "ms": int((time.time() - t_cat) * 1000)}
 
     # v1.6（L-0292）：未知知识 → 联网查证 → 检索改写（need_research/research_query 已在缓存门之前算好）
-    research_brief: dict | None = None
-    research_attempted = False
-    if need_research and web_research.enabled() and research_query:
+    research_brief: dict | None = web_brief if web_brief else None
+    research_attempted = bool(web_brief)
+    if need_research and research_query and (web_brief or web_research.enabled()):
         research_attempted = True
         yield {"event": "step", "name": "research", "status": "start"}
         t_res = time.time()
-        research_brief = yield from _run_phase_with_events(
-            lambda emit: web_research.brief(research_query, context=message,
-                                            on_progress=emit),
-            "research", heartbeat_s=5.0)
+        if web_brief:
+            research_brief = web_brief
+        else:
+            research_brief = yield from _run_phase_with_events(
+                lambda emit: web_research.brief(research_query, context=message,
+                                                on_progress=emit),
+                "research", heartbeat_s=5.0)
         yield {"event": "step", "name": "research", "status": "done",
                "detail": _research_detail(research_brief),
                "ms": int((time.time() - t_res) * 1000)}
@@ -1335,6 +1517,41 @@ def run_pipeline(sid: str, message: str, profile: dict):
            "detail": f"checked {min(VERIFY_MAX, len(candidates))} link(s)",
            "ms": int((time.time() - t_ver) * 1000)}
 
+    if stop_after_contexts:
+        contexts = yield from _run_phase_with_events(
+            lambda emit: quote_evidence.build_quote_contexts(
+                candidates, profile, members_map=members_map),
+            "quotes", heartbeat_s=5.0)
+        retrieval = {
+            "trace_id": trace_id,
+            "generated_at": utcnow(),
+            "profile": profile,
+            "catalog": catalog,
+            "candidates": candidates,
+            "per_source": per_source,
+            "fulltext_stats": fulltext_stats,
+            "contexts": contexts,
+            "research": research_brief,
+        }
+        st = _state(sid)
+        st["last_retrieval"] = retrieval
+        st["conversation_stage"] = "retrieved"
+        _set_state(sid, st)
+        return retrieval
+
+    yield {"event": "step", "name": "quotes", "status": "start"}
+    t_quo = time.time()
+    evidence_bundle, judgments, constraint_report = yield from _run_phase_with_events(
+        lambda emit: _run_constraint_stage(
+            profile, catalog, candidates, members_map, emit), "quotes",
+        heartbeat_s=5.0)
+    yield {"event": "step", "name": "quotes", "status": "done",
+           "detail": f"{len(evidence_bundle.get('contexts') or [])} quote context(s) · "
+                     + ", ".join(f"{k} {v}" for k, v in
+                                 (constraint_report.get("counts") or {}).items()),
+           "ms": int((time.time() - t_quo) * 1000)}
+    yield {"event": "constraint_report", "constraint_report": constraint_report}
+
     yield {"event": "results", "catalog": catalog[:6],
            "candidates": [{
                "title": c.get("title") or "", "year": c.get("year"),
@@ -1348,7 +1565,7 @@ def run_pipeline(sid: str, message: str, profile: dict):
     yield {"event": "step", "name": "report", "status": "start"}
     t_rep = time.time()
     report = build_report(profile, catalog, candidates, per_source, fulltext_stats,
-                          research=research_brief)
+                          research=research_brief, constraint_report=constraint_report)
     yield {"event": "report", "report": report}
     state = _state(sid)
     state["search_cache"] = {

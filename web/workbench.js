@@ -17,6 +17,7 @@
     research: "Researching the topic online",
     sources: "Searching live sources", dedup: "Deduplicating",
     papers: "Reading papers for announced datasets", verify: "Verifying links",
+    quotes: "Matching paper quotes to your constraints",
     report: "Building the report",
   };
   const SOURCE_LABEL = { europepmc: "Europe PMC", openalex: "OpenAlex", core: "CORE",
@@ -54,6 +55,10 @@
     d.appendChild(el("span", "wb-body", text));
     stamp(d, ts);
     log.appendChild(d); scrollLog(); return d;
+  }
+  function turnNote(text, cls) {
+    const n = el("div", "wb-note" + (cls ? " " + cls : ""), text);
+    log.appendChild(n); scrollLog(); return n;
   }
 
   /* ---------------- safe markdown subset (final answers) ---------------- */
@@ -111,12 +116,22 @@
       };
     });
   }
-  function mdBubble(text, ts) {
+  function mdBubble(text, ts, parent) {
     const d = el("div", "wb-msg assistant md");
     d.innerHTML = renderMarkdown(text);
     collapseLists(d);
     stamp(d, ts);
-    log.appendChild(d); scrollLog(); return d;
+    (parent || log).appendChild(d); scrollLog(); return d;
+  }
+  function setAssistantText(turn, text) {
+    let b = turn.querySelector(".wb-msg.assistant.md");
+    if (!b) {
+      b = el("div", "wb-msg assistant md");
+      b._raw = "";
+      turn.appendChild(b);
+    }
+    b._raw = String(text || "");
+    b.innerHTML = renderMarkdown(b._raw);
   }
   function tokenBubble(turn, text) {
     let b = turn.querySelector(".wb-msg.assistant.md");
@@ -140,7 +155,7 @@
   /* ---------------- web research card (v1.6) ---------------- */
   function renderResearch(r, parent) {
     if (!r) return null;
-    const host = parent || log;
+    const host = parent ? (parent._timeline || parent) : log;
     const card = el("div", "wb-research");
     const head = el("div", "wb-research-head");
     head.appendChild(el("span", "wb-research-title", "Web research"));
@@ -179,18 +194,43 @@
     host.appendChild(card); scrollLog();
     return card;
   }
+  function setStatus(turn, text, elapsedMs) {
+    let line = turn.querySelector(".wb-statusline");
+    if (!line) {
+      line = el("div", "wb-statusline");
+      line.appendChild(el("span", "dot"));
+      line.appendChild(el("span", "label", ""));
+      turn.insertBefore(line, turn.firstChild);
+    }
+    line._label = text || "Working";
+    line._base = Date.now() - Number(elapsedMs || 0);
+    if (line._timer) clearInterval(line._timer);
+    const paint = () => {
+      const sec = ((Date.now() - line._base) / 1000).toFixed(1);
+      line.querySelector(".label").textContent = `${line._label} · ${sec}s`;
+    };
+    paint();
+    line._timer = setInterval(paint, 1000);
+    line.classList.add("running");
+    scrollLog();
+  }
+
   function stepLine(turn, name, status, detail, counts, ms) {
-    let line = turn.querySelector(`[data-step="${name}"]`);
+    const host = turn._timeline || turn;
+    let line = host.querySelector(`[data-step="${name}"]`);
     if (!line) {
       line = el("div", "wb-step");
       line.dataset.step = name;
       line.appendChild(el("span", "dot"));
       line.appendChild(el("span", "label", STEP_LABEL[name] || name));
       line.appendChild(el("span", "detail"));
-      turn.appendChild(line);
+      host.appendChild(line);
     }
     line.classList.toggle("running", status === "start");
     line.classList.toggle("done", status === "done");
+    if (status === "start") {
+      setStatus(turn, STEP_LABEL[name] || name, 0);
+    }
     if (status === "done") turn._doneCount = (turn._doneCount || 0) + 1;
     const det = line.querySelector(".detail");
     if (counts && typeof counts === "object" && !Array.isArray(counts)) {
@@ -215,12 +255,15 @@
     scrollLog();
   }
 
+  function statusLine(turn, ev) {
+    setStatus(turn, ev.text || "Working", ev.elapsed_ms || 0);
+  }
+
   function progressLine(turn, ev) {
-    let hist = turn.querySelector(".wb-plines");
-    if (!hist) { hist = el("div", "wb-plines"); turn.appendChild(hist); }
+    const hist = turn._timeline || turn;
     const sec = ((Date.now() - (turn._t0 || Date.now())) / 1000).toFixed(1);
     if (ev.heartbeat) {
-      let hb = turn.querySelector(".wb-pline.hb");
+      let hb = hist.querySelector(".wb-pline.hb");
       if (!hb) {
         hb = el("div", "wb-pline hb");
         hb.appendChild(el("span", "t"));
@@ -230,7 +273,7 @@
       hb.querySelector(".t").textContent = "+" + sec + "s";
       hb.querySelector(".x").textContent = ev.text;
     } else {
-      const hb = turn.querySelector(".wb-pline.hb");
+      const hb = hist.querySelector(".wb-pline.hb");
       if (hb) hb.remove();
       const line = el("div", "wb-pline");
       line.appendChild(el("span", "t", "+" + sec + "s"));
@@ -259,16 +302,24 @@
   }
 
   /* ---------------- sessions (kind-aware: research | ming, L-0234) ---------------- */
+  const TEST_SESSION_RE = /^(smoke-|P0 research|P0 ming|AD guard|AD single-nucleus|summary-probe|status probe|what is RNA\?|Call the execute tool|hitl probe|confirm test|alias test|ontology test|api-smoke|spatial transcriptomics of mouse brain development)/i;
+  function isTestSession(s) { return TEST_SESSION_RE.test(s.title || ""); }
   function currentKind() {
     return document.getElementById("wb-ming-pane").classList.contains("wb-hidden")
       ? "research" : "ming";
   }
   async function loadSessions() {
     const kind = currentKind();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const data = await api(`/api/chat/sessions?kind=${kind}`);
+      listEl.innerHTML = '<p class="wb-empty">Loading sessions…</p>';
+      const data = await api(`/api/chat/sessions?kind=${kind}&limit=200`,
+                             { signal: ctrl.signal });
       listEl.innerHTML = "";
-      (data.sessions || []).forEach((s) => {
+      const visible = (data.sessions || []).filter((s) =>
+        !isTestSession(s) && Number(s.assistant_count || 0) > 0);
+      visible.forEach((s) => {
         const active = kind === "ming" ? s.id === mnlSid : s.id === sid;
         const d = el("div", "wb-session" + (active ? " active" : ""));
         d.appendChild(el("div", "t", s.title || "(untitled)"));
@@ -276,12 +327,22 @@
         d.onclick = () => (kind === "ming" ? openMingSession(s.id) : openSession(s.id));
         listEl.appendChild(d);
       });
-      if (!(data.sessions || []).length) {
+      if (!visible.length) {
         listEl.appendChild(el("p", "wb-empty", kind === "ming"
           ? "No Ming sessions yet — describe what to mine to start one."
-          : "No sessions yet — ask a question to start one."));
+          : "No sessions yet — send a request to start one."));
       }
-    } catch (e) { /* keep silent */ }
+    } catch (e) {
+      listEl.innerHTML = "";
+      const msg = e && e.name === "AbortError"
+        ? "Session list timed out; retry." : "Could not load sessions; retry.";
+      const p = el("p", "wb-empty", msg);
+      p.style.cursor = "pointer";
+      p.onclick = loadSessions;
+      listEl.appendChild(p);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function newSession() {
@@ -349,8 +410,9 @@
           chips(meta.options || [], (o) => send(o));
         } else if (meta.kind === "report" && meta.report) {
           if (meta.steps && meta.steps.length) renderHistorySteps(meta.steps);
+          else turnNote("No step history (legacy session).");
           if (meta.report.research) renderResearch(meta.report.research);
-          mdBubble(m.content, meta.report.generated_at || m.created_at);
+          mdBubble(meta.summary || m.content, meta.report.generated_at || m.created_at);
           const cat = (meta.report.items || []).filter((i) => i.type === "catalog");
           const cand = (meta.report.items || []).filter((i) => i.type === "candidate");
           resultSets.push({ ts: meta.report.generated_at || m.created_at,
@@ -367,7 +429,7 @@
 
   function renderIntro() {
     const d = el("div", "wb-intro");
-    d.appendChild(el("h2", "", "Ask about biomedical data in papers"));
+    d.appendChild(el("h2", "", "Find public biomedical datasets announced in papers"));
     d.appendChild(el("p", "", "Describe what you need — any research topic: a disease, a "
       + "biological process or a technique, with organ/organism details if any. The agent "
       + "clarifies your intent, searches the "
@@ -393,11 +455,20 @@
 
   function reportSummaryBox(report) {
     const box = el("div", "wb-rep");
-    const row = (k, v) => { const r = el("div", "row"); r.textContent = `${k}: ${v}`; return r; };
+    const row = (k, v, title) => {
+      const r = el("div", "row"); r.textContent = `${k}: ${v}`;
+      if (title) r.title = title;
+      return r;
+    };
     const c = report.counts || {};
-    box.appendChild(row("Catalog records", c.catalog ?? 0));
-    box.appendChild(row("External candidates", c.candidates ?? 0));
-    box.appendChild(row("Paper-announced datasets", c.datasets ?? 0));
+    const crRows = report.constraint_report && report.constraint_report.records || [];
+    const uniqueRows = new Set(crRows.map((r) => String(r.accession || "")).filter(Boolean)).size;
+    box.appendChild(row("Papers searched", Number(c.catalog || 0) + Number(c.candidates || 0),
+      "Catalog and live-source papers after dedupe; one paper can announce several datasets."));
+    box.appendChild(row("Dataset rows", uniqueRows || c.datasets || 0,
+      "Unique accession rows in this result; not downloaded raw data."));
+    box.appendChild(el("div", "wb-note",
+      "Counts are papers/accession rows, not downloaded files."));
     if (report.research) {
       box.appendChild(row("Web research",
         (report.research.search_terms || []).length + " term(s) · "
@@ -416,10 +487,34 @@
       box.appendChild(row("Full text", ftKeys.map((k) =>
         `${FT_LABEL[k] || k} ${ft[k]}`).join(" · ")));
     }
+    const cr = report.constraint_report || {};
+    if (cr.requested && cr.requested.length) {
+      const cc = cr.counts || {};
+      box.appendChild(row("Constraint check",
+        ["full", "partial", "unknown", "restricted", "fail"]
+          .map((k) => `${k} ${cc[k] || 0}`).join(" · ")));
+      box.appendChild(el("div", "wb-note",
+        "full = every requested constraint has a quote/metadata; partial = some; "
+        + "unknown = the paper does not state it; restricted = controlled access; "
+        + "fail = contradicted."));
+    }
+    if ((cr.disclosure || []).length) {
+      const d = el("div", "wb-note", cr.disclosure.join(" · "));
+      box.appendChild(d);
+    }
     box.appendChild(row("Quality gate", report.rubric_ok
       ? "passed" : `issues: ${(report.rubric_issues || []).join("; ")}`));
     box.appendChild(row("Generated", fmtTs(report.generated_at)));
     return box;
+  }
+
+  function matchTitle(d) {
+    const gaps = (d.constraint_gaps || d.missing || []).join(", ");
+    const bad = (d.constraint_contradictions || d.contradicted || []).join(", ");
+    return "Constraint status: " + (d.match_status || "unknown")
+      + (gaps ? `; not stated: ${gaps}` : "")
+      + (bad ? `; contradicted: ${bad}` : "")
+      + ". Provenance is a separate label; it does not mean the constraints match.";
   }
 
   function datasetBlock(datasets) {
@@ -431,6 +526,13 @@
       if (d.repository) row.appendChild(el("span", "wb-badge", d.repository));
       if (d.da_evidence) row.appendChild(el("span", "wb-badge ok", "DA section"));
       if (d.t2) row.appendChild(el("span", "wb-badge ok", "link ok"));
+      if (d.match_status) {
+        const st = String(d.match_status);
+        const cls = st === "full" ? "ok" : (st === "fail" ? "bad" : "warn");
+        const b = el("span", `wb-badge ${cls}`, st);
+        b.title = matchTitle(d);
+        row.appendChild(b);
+      }
       wrap.appendChild(row);
       if (d.quote) wrap.appendChild(el("div", "quote", d.quote));
       if (d.url) {
@@ -442,22 +544,29 @@
     return wrap;
   }
 
-  function catalogSection(catalog) {
+  function catalogSection(catalog, total) {
+    const n = (catalog || []).length;
+    const all = Number(total || n);
     const catSec = el("div", "wb-sec");
-    catSec.appendChild(el("h4", "", `Catalog records — verified (${(catalog || []).length})`));
+    catSec.appendChild(el("h4", "", `Catalog records — curated (${n} shown${all > n ? ` of ${all}` : ""})`));
     catSec.appendChild(el("p", "wb-secinfo",
-      "Curated in BioAgentDB — each accession appears in the paper's evidence quote; links checked."));
+      "Curated in BioAgentDB — evidence quote stored; badges show whether your constraints match."));
     (catalog || []).forEach((it) => {
       const card = el("div", "wb-card");
       card.appendChild(el("div", "t", `${it.title} ${it.year ? `(${it.year})` : ""}`));
       const meta = el("div", "meta");
+      let constraint = "full";
       (it.datasets || []).forEach((ds) => {
         const b = el("span", "wb-badge mono", ds.accession || "?");
         b.title = `${ds.repository || ""} · ${ds.status || ""}`;
         meta.appendChild(b);
+        if (ds.match_status && ds.match_status !== "full") constraint = ds.match_status;
       });
-      const vb = el("span", "wb-badge ok", "verified");
-      vb.title = "Curated record — accession matches the paper's evidence quote.";
+      const vb = el("span", `wb-badge ${constraint === "full" ? "ok" : "warn"}`,
+        constraint === "full" ? "verified" : `constraint: ${constraint}`);
+      vb.title = constraint === "full"
+        ? "Curated record — accession matches the paper's evidence quote."
+        : "Curated record, but a requested constraint is contradicted or unknown.";
       meta.appendChild(vb);
       card.appendChild(meta);
       if (it.evidence) card.appendChild(el("div", "quote", it.evidence));
@@ -468,9 +577,11 @@
     return catSec;
   }
 
-  function candidateSection(candidates) {
+  function candidateSection(candidates, total) {
+    const n = (candidates || []).length;
+    const all = Number(total || n);
     const candSec = el("div", "wb-sec");
-    candSec.appendChild(el("h4", "", `Papers to inspect (${(candidates || []).length})`));
+    candSec.appendChild(el("h4", "", `Candidate papers — no accession extracted (${n} shown${all > n ? ` of ${all}` : ""})`));
     candSec.appendChild(el("p", "wb-secinfo",
       "Found by live sources — not catalogued yet. Use “Verify now” to read a paper's full text and check its links on the spot."));
     (candidates || []).forEach((it) => {
@@ -478,8 +589,8 @@
       card.appendChild(el("div", "t", `${it.title} ${it.year ? `(${it.year})` : ""}`));
       const meta = el("div", "meta");
       (it.sources || []).forEach((s) => meta.appendChild(el("span", "wb-badge", SOURCE_LABEL[s] || s)));
-      const vb = el("span", "wb-badge warn", "not yet verified");
-      vb.title = "Not catalogued yet — found by live sources; use Verify now to check it.";
+      const vb = el("span", "wb-badge warn", "paper finding (not cataloged)");
+      vb.title = "Found by live sources; not curated in the catalog. This is a provenance label, not a constraint match.";
       vb.dataset.role = "verifybadge";
       meta.appendChild(vb);
       if (it.fulltext_kind && it.fulltext_kind !== "none") {
@@ -502,60 +613,142 @@
   }
 
   function datasetRows(rs) {
-    const rows = [];
-    (rs.catalog || []).forEach((it) => (it.datasets || []).forEach((d) =>
-      rows.push({ d, it, verified: true })));
-    (rs.candidates || []).forEach((it) => (it.datasets || []).forEach((d) =>
-      rows.push({ d, it, verified: false })));
-    return rows;
+    const cr = rs.report.constraint_report || {};
+    const by = new Map();
+    (cr.records || []).forEach((r) => {
+      const acc = String(r.accession || "").trim();
+      if (!acc || by.has(acc.toUpperCase())) return;
+      by.set(acc.toUpperCase(), {
+        accession: acc,
+        paper: r.paper || "",
+        status: r.status || "unknown",
+        constraints: r.constraints || {},
+        missing: r.missing_constraints || [],
+        contradicted: r.contradicted_constraints || [],
+        quote: r.quote || "",
+        url: r.url || "",
+      });
+    });
+    if (!by.size) {
+      // Legacy reports before constraint_report.records existed.
+      (rs.catalog || []).forEach((it) => (it.datasets || []).forEach((d) => {
+        const acc = String(d.accession || "").trim();
+        if (acc && !by.has(acc.toUpperCase())) by.set(acc.toUpperCase(), {
+          accession: acc, paper: it.title || "", status: d.match_status || "unknown",
+          constraints: {}, missing: d.constraint_gaps || [],
+          contradicted: d.constraint_contradictions || [],
+          quote: d.quote || it.evidence || "", url: d.url || "",
+        });
+      }));
+      (rs.candidates || []).forEach((it) => (it.datasets || []).forEach((d) => {
+        const acc = String(d.accession || "").trim();
+        if (acc && !by.has(acc.toUpperCase())) by.set(acc.toUpperCase(), {
+          accession: acc, paper: it.title || "", status: d.match_status || "unknown",
+          constraints: {}, missing: d.constraint_gaps || [],
+          contradicted: d.constraint_contradictions || [],
+          quote: d.quote || "", url: d.url || "",
+        });
+      }));
+    }
+    const rank = { full: 0, partial: 1, restricted: 2, unknown: 3, fail: 4 };
+    return [...by.values()].sort((a, b) =>
+      (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
   }
 
   function datasetSection(rs) {
-    const rows = datasetRows(rs);
+    const all = datasetRows(rs);
+    const filter = rs.datasetFilter || "all";
+    const rows = filter === "full" ? all.filter((r) => r.status === "full")
+      : filter === "needs" ? all.filter((r) => r.status !== "full") : all;
     const sec = el("div", "wb-sec");
-    sec.appendChild(el("h4", "", `Datasets (${rows.length})`));
+    sec.appendChild(el("h4", "", `Datasets (${rows.length} shown of ${all.length})`));
     sec.appendChild(el("p", "wb-secinfo",
-      "One row per accession — switch back to “By paper” for titles and evidence quotes."));
+      "One row per accession. full = every requested constraint has a quote; "
+      + "partial/unknown/fail are not full matches."));
+    const bar = el("div", "wb-dsfilter");
+    [["all", `All (${all.length})`],
+     ["full", `Only full (${all.filter((r) => r.status === "full").length})`],
+     ["needs", `Needs inspection (${all.filter((r) => r.status !== "full").length})`]]
+      .forEach(([key, label]) => {
+        const b = el("button", "wb-vbtn" + (filter === key ? " on" : ""), label);
+        b.type = "button";
+        b.onclick = (e) => { e.preventDefault(); e.stopPropagation();
+          rs.datasetFilter = key; renderResultSets(); };
+        bar.appendChild(b);
+      });
+    sec.appendChild(bar);
     if (!rows.length) {
-      sec.appendChild(el("p", "wb-empty", "No accessions in this result."));
+      sec.appendChild(el("p", "wb-empty", "No dataset rows match this filter."));
       return sec;
     }
-    [["Verified — in the catalog", rows.filter((r) => r.verified)],
-     ["Not yet verified — from live sources", rows.filter((r) => !r.verified)]
-    ].forEach(([label, list]) => {
-      if (!list.length) return;
-      sec.appendChild(el("h5", "wb-dsh", `${label} (${list.length})`));
-      list.forEach(({ d, it, verified }) => {
-        const card = el("div", "wb-card wb-dscard");
-        const meta = el("div", "meta");
-        const ab = el("span", "wb-badge mono", d.accession || "?");
-        ab.title = [d.repository, d.status].filter(Boolean).join(" · ") || "accession";
-        meta.appendChild(ab);
-        if (d.repository) meta.appendChild(el("span", "wb-badge", d.repository));
-        if (d.status && d.status.toLowerCase() !== "verified")
-          meta.appendChild(el("span", "wb-badge", d.status));
-        if (!verified && d.da_evidence) meta.appendChild(el("span", "wb-badge ok", "Data Availability"));
-        const vb = el("span", "wb-badge " + (verified ? "ok" : "warn"),
-          verified ? "verified" : "not yet verified");
-        vb.title = verified
-          ? "Curated record — accession matches the paper's evidence quote."
-          : "Not catalogued yet — found by live sources; inspect before use.";
-        meta.appendChild(vb);
-        card.appendChild(meta);
-        card.appendChild(el("div", "t",
-          `${it.title || ""}${it.year ? ` (${it.year})` : ""}`));
-        if (verified) {
-          card.appendChild(recordLink(it));
-        } else {
-          const url = it.landing_url || it.oa_url || (it.doi ? `https://doi.org/${it.doi}` : "");
-          if (url) {
-            const a = el("a", "", url.length > 64 ? url.slice(0, 64) + "…" : url);
-            a.href = url; a.target = "_blank"; a.rel = "noopener";
-            card.appendChild(a);
-          }
+    rows.forEach((r) => {
+      const card = el("div", "wb-card wb-dscard");
+      const meta = el("div", "meta");
+      meta.appendChild(el("span", "wb-badge mono", r.accession));
+      const st = String(r.status);
+      const cls = st === "full" ? "ok" : (st === "fail" ? "bad" : "warn");
+      const badge = el("span", `wb-badge ${cls}`, st);
+      badge.title = matchTitle(r);
+      meta.appendChild(badge);
+      card.appendChild(meta);
+      card.appendChild(el("div", "t", r.paper || ""));
+      if (r.missing.length) {
+        card.appendChild(el("div", "wb-note", "not stated: " + r.missing.join(", ")));
+      }
+      if (r.contradicted.length) {
+        card.appendChild(el("div", "wb-note warn",
+          "contradicts: " + r.contradicted.join(", ")));
+      }
+      if (r.quote) card.appendChild(el("div", "quote", r.quote));
+      Object.entries(r.constraints || {}).forEach(([k, c]) => {
+        if (c && c.status === "supported" && c.quote) {
+          card.appendChild(el("div", "wb-note",
+            `${k}: ${c.value || "supported"} — “${String(c.quote).slice(0, 160)}”`));
         }
-        sec.appendChild(card);
       });
+      if (r.url) {
+        const a = el("a", "", r.url.length > 72 ? r.url.slice(0, 72) + "…" : r.url);
+        a.href = r.url; a.target = "_blank"; a.rel = "noopener";
+        card.appendChild(a);
+      }
+      sec.appendChild(card);
+    });
+    return sec;
+  }
+
+  function eligibleSection(report) {
+    const cr = report.constraint_report || {};
+    if (!(cr.requested || []).length) return null;
+    const rows = cr.eligible || [];
+    const sec = el("div", "wb-sec");
+    sec.appendChild(el("h4", "", `Meets all requested constraints (${rows.length})`));
+    if (!rows.length) {
+      sec.appendChild(el("p", "wb-empty",
+        "No record has every requested constraint supported by a quote or catalog metadata. "
+        + "Partial/unknown records below are not full matches."));
+      return sec;
+    }
+    rows.forEach((r) => {
+      const card = el("div", "wb-card");
+      const meta = el("div", "meta");
+      meta.appendChild(el("span", "wb-badge ok mono", r.accession || "?"));
+      meta.appendChild(el("span", "wb-badge ok", "full match"));
+      card.appendChild(meta);
+      card.appendChild(el("div", "t", r.paper || ""));
+      if (r.quote) card.appendChild(el("div", "quote", r.quote));
+      Object.entries(r.constraints || {}).forEach(([k, c]) => {
+        if (c && c.status === "supported") {
+          const q = (c.quote || "").slice(0, 180);
+          card.appendChild(el("div", "wb-note",
+            `${k}: ${c.value || "supported"}${q ? ` — “${q}”` : ""}`));
+        }
+      });
+      if (r.url) {
+        const a = el("a", "", r.url.length > 72 ? r.url.slice(0, 72) + "…" : r.url);
+        a.href = r.url; a.target = "_blank"; a.rel = "noopener";
+        card.appendChild(a);
+      }
+      sec.appendChild(card);
     });
     return sec;
   }
@@ -564,12 +757,13 @@
     resultsEl.innerHTML = "";
     if (!resultSets.length) {
       resultsEl.appendChild(el("p", "wb-empty",
-        "Ask a question — catalog records, paper-announced datasets and a report will appear here."));
+        "Describe a research need — catalog records, paper-announced datasets and a report will appear here."));
       enableExports(false);
       return;
     }
     resultSets.forEach((rs, idx) => {
-      if (rs.view === undefined) rs.view = "paper";
+      if (rs.view === undefined) rs.view = "dataset";
+      if (rs.datasetFilter === undefined) rs.datasetFilter = "all";
       if (rs.checked === undefined) rs.checked = true;
       const card = el("details", "wb-rset" + (idx === 0 ? " latest" : ""));
       card.open = rs.open !== undefined ? rs.open : idx === 0;
@@ -584,9 +778,12 @@
       sum.appendChild(cb);
       sum.appendChild(el("span", "wb-rts", fmtTs(rs.ts)));
       const nDs = datasetRows(rs).length;
+      const cr = rs.report.constraint_report || {};
+      const fullN = Number((cr.counts || {}).full || 0);
+      const totalPapers = Number((rs.report.counts || {}).catalog || 0)
+        + Number((rs.report.counts || {}).candidates || 0);
       sum.appendChild(el("span", "wb-rsum",
-        `${rs.catalog.length} verified · ${rs.candidates.length} to inspect`
-        + (nDs ? ` · ${nDs} datasets` : "")
+        `${totalPapers} papers · ${nDs} dataset rows · ${fullN} full`
         + (rs.report.rubric_ok === false ? " · quality issues" : "")));
       card.appendChild(sum);
       const body = el("div", "wb-rsbody");
@@ -594,22 +791,7 @@
       if (rs.report.relax_suggestion) {
         body.appendChild(el("div", "wb-relax", rs.report.relax_suggestion));
       }
-      const bar = el("div", "wb-viewbar");
-      const mk = (key, label) => {
-        const b = el("button", "wb-vbtn" + (rs.view === key ? " on" : ""), label);
-        b.type = "button";
-        b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); rs.view = key; renderResultSets(); };
-        return b;
-      };
-      bar.appendChild(mk("paper", `By paper (${rs.catalog.length + rs.candidates.length})`));
-      bar.appendChild(mk("dataset", `By dataset (${nDs})`));
-      body.appendChild(bar);
-      if (rs.view === "dataset") {
-        body.appendChild(datasetSection(rs));
-      } else {
-        body.appendChild(catalogSection(rs.catalog));
-        body.appendChild(candidateSection(rs.candidates));
-      }
+      body.appendChild(datasetSection(rs));
       card.appendChild(body);
       resultsEl.appendChild(card);
     });
@@ -653,22 +835,29 @@
           exclusions: rs.report.research.exclusions || [],
           sources: rs.report.research.sources || [] }));
       }
-      (rs.report.items || []).forEach((i) =>
-        lines.push(JSON.stringify({ result_time: rs.ts, ...i })));
+      const rows = datasetRows(rs);
+      if (rows.length) {
+        rows.forEach((r) => lines.push(JSON.stringify({
+          result_time: rs.ts, type: "dataset", accession: r.accession,
+          status: r.status, paper: r.paper, missing: r.missing,
+          contradicted: r.contradicted, quote: r.quote, url: r.url,
+          constraints: r.constraints,
+        })));
+      } else {
+        (rs.report.items || []).forEach((i) =>
+          lines.push(JSON.stringify({ result_time: rs.ts, ...i })));
+      }
     });
     download("bioagentdb-workbench.jsonl", lines.join("\n") + "\n", "application/jsonl");
   }
   function exportCSV() {
     const sets = selectedSets();
     if (!sets.length) return;
-    const rows = [["result_time", "type", "title", "year", "sources", "doi", "pmid",
-      "catalog_accessions", "announced_accessions", "url"]];
-    sets.forEach((rs) => (rs.report.items || []).forEach((i) => {
-      rows.push([rs.ts, i.type, i.title, i.year || "",
-        (i.sources || []).join("|"), i.doi || "", i.pmid || "",
-        (i.datasets || []).map((d) => d.accession).join("|"),
-        (i.datasets || []).map((d) => d.accession).join("|"),
-        i.landing_url || ""]);
+    const rows = [["result_time", "accession", "status", "paper", "missing",
+      "contradicted", "quote", "url"]];
+    sets.forEach((rs) => datasetRows(rs).forEach((r) => {
+      rows.push([rs.ts, r.accession, r.status, r.paper,
+        r.missing.join("|"), r.contradicted.join("|"), r.quote, r.url]);
     }));
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     download("bioagentdb-workbench.csv", csv + "\n", "text/csv");
@@ -770,18 +959,34 @@
       case "step":
         stepLine(turn, ev.name, ev.status, ev.detail, ev.counts, ev.ms);
         break;
+      case "status":
+        statusLine(turn, ev);
+        break;
+      case "summary":
+        mdBubble(ev.markdown || "", new Date().toISOString(), turn);
+        break;
       case "progress":
         progressLine(turn, ev);
         break;
       case "token":
-        tokenBubble(turn, ev.text);
+        if (ev.replace) {
+          const b = turn.querySelector(".wb-msg.assistant.md");
+          if (b) { b._raw = ""; b.innerHTML = ""; }
+        } else {
+          tokenBubble(turn, ev.text);
+        }
         break;
       case "profile":
         renderProfile(ev.profile, ev.ready, ev.missing, ev.defaults);
         break;
       case "clarify":
-        bubble("assistant", ev.text);
+        setAssistantText(turn, ev.text);
         chips(ev.options || [], (o) => send(o));
+        if (!resultSets.length) {
+          resultsEl.innerHTML = "";
+          resultsEl.appendChild(el("p", "wb-empty",
+            "Clarification needed — no dataset search has run for this turn yet."));
+        }
         break;
       case "refusal":
         bubble("assistant", ev.text);
@@ -801,12 +1006,26 @@
         renderResultSets();
         break;
       }
+      case "rubric": {
+        const ok = ev.status === "satisfied";
+        const n = el("div", `wb-note ${ok ? "" : "warn"}`,
+          `Quality review: ${ev.status || "unknown"}` + (ok ? "" : " — see report gate"));
+        turn.appendChild(n);
+        break;
+      }
       case "error": bubble("error", ev.message); break;
       case "done": {
-        const sec = ((Date.now() - (turn._t0 || Date.now())) / 1000).toFixed(0);
+        const sec = ev.elapsed_ms ? (ev.elapsed_ms / 1000).toFixed(0)
+          : ((Date.now() - (turn._t0 || Date.now())) / 1000).toFixed(0);
+        const steps = Number(turn._doneCount || 0);
         const sum = el("div", "wb-done-line",
-          `Completed · ${turn._doneCount || 0} steps · ${sec}s`);
+          steps ? `Completed · ${steps} steps · ${sec}s` : `Completed · ${sec}s`);
         turn.appendChild(sum);
+        const sl = turn.querySelector(".wb-statusline");
+        if (sl) {
+          if (sl._timer) clearInterval(sl._timer);
+          sl.remove();
+        }
         const tb = turn.querySelector(".wb-msg.assistant.md");
         if (tb && !tb.querySelector(".wb-ts")) stamp(tb);
         turn.querySelectorAll(".wb-pline.cur").forEach((n) => n.classList.remove("cur"));
@@ -833,6 +1052,8 @@
       const turn = el("div", "wb-steps");
       turn._t0 = Date.now();
       turn._doneCount = 0;
+      turn._timeline = el("div", "wb-timeline");
+      turn.appendChild(turn._timeline);
       log.appendChild(turn);
       abortCtrl = new AbortController();
       const resp = await fetch(`/api/chat/sessions/${sid}/message`, {

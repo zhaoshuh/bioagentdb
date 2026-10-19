@@ -413,6 +413,32 @@ _ALIAS_SYSTEM = (
 
 _ACRONYM_RE = re.compile(r"^[A-Z][A-Z0-9-]{1,7}$")
 
+# Well-established biomedical acronyms whose canonical expansion is present in
+# the resolved page.  These are abbreviations, not ambiguous meanings; asking
+# "Motor neuron disease or motor neurone disease?" for ALS is noise.
+_ACRONYM_EXPANSIONS = {
+    "als": ("amyotrophic lateral sclerosis",),
+    "ad": ("alzheimer's disease", "alzheimer disease"),
+    "pd": ("parkinson's disease", "parkinson disease"),
+    "ms": ("multiple sclerosis",),
+    "ftd": ("frontotemporal dementia",),
+    "hd": ("huntington's disease", "huntington disease"),
+    "csf": ("cerebrospinal fluid",),
+    "pbmc": ("peripheral blood mononuclear cell",),
+    "gwas": ("genome-wide association",),
+    "wgs": ("whole-genome sequencing",),
+    "wxs": ("whole-exome sequencing",),
+    "scrna": ("single-cell rna",),
+    "snrna": ("single-nucleus rna",),
+}
+
+
+def _known_acronym(label: str, canonical: str) -> bool:
+    key = (label or "").strip().lower()
+    c = (canonical or "").strip().lower()
+    return any(exp in c for exp in _ACRONYM_EXPANSIONS.get(key, ()))
+
+
 # Thesaurus/SEO synonym farms are not biomedical evidence.
 _BAD_ALIAS_DOMAINS = {
     "powerthesaurus.org", "wordhippo.com", "synonyms.com", "synonym.com",
@@ -578,9 +604,9 @@ def resolve_aliases(label: str, kind: str = "topic", *, context: str = "",
     if not aliases:
         return None
     acronym = bool(_ACRONYM_RE.match(label))
-    # Only acronyms are treated as inherently ambiguous. A longer label being
-    # normalized to a shorter canonical form is not a meaning change.
-    needs_confirmation = acronym
+    # Only acronyms are treated as inherently ambiguous; a known expansion in
+    # the authoritative page (e.g. ALS -> amyotrophic lateral sclerosis) is not.
+    needs_confirmation = acronym and not _known_acronym(label, canonical)
     payload = {
         "label": label, "kind": kind, "canonical": canonical or label,
         "aliases": aliases, "needs_confirmation": needs_confirmation,
@@ -629,6 +655,8 @@ def resolve_profile(profile: dict, *, max_concepts: int = 3) -> tuple[dict, list
         c["aliases"] = res.get("aliases") or []
         c["needs_confirmation"] = bool(res.get("needs_confirmation"))
         c["canonical"] = res.get("canonical") or label
+        if c["needs_confirmation"] and _known_acronym(label, c["canonical"]):
+            c["needs_confirmation"] = False
         if c["needs_confirmation"]:
             unresolved.append({
                 "concept_id": c.get("id"), "label": label,

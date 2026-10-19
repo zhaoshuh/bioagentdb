@@ -66,6 +66,12 @@ def parse_patch(block: str) -> list[tuple[str, str]]:
 
 
 def main() -> None:
+    import os
+    if os.environ.get("BIOAGENTDB_ALLOW_CBC_PAPER") != "1":
+        raise SystemExit(
+            "make_cbc_paper.py is RETIRED (L-0348 D2'): the CBC manuscript is edited "
+            "directly (docs/paper/cbc/cbc-paper.md); running this script would OVERWRITE it "
+            "from final/paper.md + overrides. Set BIOAGENTDB_ALLOW_CBC_PAPER=1 to force.")
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="verify only; do not write output")
     args = ap.parse_args()
@@ -201,10 +207,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import os
-    if not os.environ.get("BIOAGENTDB_ALLOW_CBC_PAPER"):
-        raise SystemExit(
-            "make_cbc_paper.py is RETIRED (L-0348 D2'): the CBC manuscript is edited "
-            "directly (docs/paper/cbc/cbc-paper.md); running this script would OVERWRITE it "
-            "from final/paper.md + overrides. Set BIOAGENTDB_ALLOW_CBC_PAPER=1 to force.")
     main()

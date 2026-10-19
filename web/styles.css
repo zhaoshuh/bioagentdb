@@ -48,7 +48,7 @@ body {
 .navlinks { display: flex; gap: 20px; }
 .navlinks a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
 .navlinks a:hover { color: var(--ink); }
-.navlinks a.active { color: var(--teal-ink); }
+.navlinks a.active, .navlinks a.route-active { color: var(--teal-ink); }
 .gear { margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 8px;
   width: 30px; height: 30px; color: var(--muted); cursor: pointer; font-size: 14px; }
 .gear:hover { color: var(--ink); border-color: var(--muted); }
