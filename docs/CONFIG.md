@@ -87,7 +87,7 @@
 | sources_europepmc_page_size | 100 | 分页大小 |
 | verify_weights | {t1_paper_grounding:1.5, t2_link_reachable:1.0, t2_source_metadata:1.5} | 核验加权（键 = 检查项名；`app/harvest/verify.py` 实际消费） |
 
-### workbench — 对话工作台
+### Ask the agent — 对话工作台
 `workbench_top_n=10` · `workbench_k_fulltext=8` · `workbench_source_want=15` ·
 `workbench_time_budget_s=25` · `workbench_verify_max=6` · `workbench_max_clarify=2` ·
 `workbench_pdf_session_cap=20` · `workbench_default_organism="Homo sapiens"`

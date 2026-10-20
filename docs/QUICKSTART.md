@@ -48,7 +48,7 @@ There are two equivalent ways to mine:
 ./start.sh --with-mining        # app + prewarm miner + task scheduler (mining profile)
 ```
 
-Then open the home page chat (or `workbench.html` → **Ming**), describe a topic or disease, confirm the
+Then open the home page chat (or `/ask` → **Ming**), describe a topic or disease, confirm the
 mining task, and watch progress on `mining.html`. On a blank database the prewarm profile creates its
 configured themes on demand.
 

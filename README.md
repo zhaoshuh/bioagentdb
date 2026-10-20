@@ -90,7 +90,7 @@ Flags: `--out` (output root) · `--limit` (papers per round) · `--workers` ·
 
 ## My mining — long-running mining tasks (user-facing)
 
-On the site, talk to the agent — home-page chat or the workbench **Ming** panel — and confirm a
+On the site, talk to the agent — home-page chat or the Ask the agent **Ming** panel — and confirm a
 **mining task** for any research topic (diseases are just one kind): the agent derives the theme,
 queries, budget and cadence, then a resident scheduler mines in the background — first until the
 literature is exhausted, then a patrol. **Verified dataset records are published to the public
@@ -106,7 +106,7 @@ python scripts/scheduler.py --once     # one pass to idle (tests)
 Docker: `./start.sh --with-mining` starts it as the `scheduler` service (mining profile).
 
 Configuration is **file-based**: `config/bioagentdb.example.toml` (copy to `config/bioagentdb.toml`)
-carries every tunable — task bounds, scheduler & guardrails, miner, sources, verification, workbench,
+carries every tunable — task bounds, scheduler & guardrails, miner, sources, verification, Ask the agent,
 collect — and `.env` keeps secrets/deployment. See [`docs/CONFIG.md`](docs/CONFIG.md).
 
 ## Pipeline

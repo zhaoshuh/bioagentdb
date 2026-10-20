@@ -1,5 +1,5 @@
 /* Shared record / dataset detail modal.
-   Used by the ledger (app.js) and the Ask workbench (workbench.js).
+   Used by the ledger (app.js) and Ask the agent (workbench.js).
    Exposes: window.showPaperDetail(record), window.showDetail(datasetId), window.closeModal(). */
 (() => {
   "use strict";

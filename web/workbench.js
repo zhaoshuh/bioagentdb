@@ -1,4 +1,4 @@
-/* Chat workbench (v1.5) — sessions, SSE streaming, three result classes, exports. */
+/* Ask the agent (v1.5) — sessions, SSE streaming, three result classes, exports. */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -848,7 +848,7 @@
           lines.push(JSON.stringify({ result_time: rs.ts, ...i })));
       }
     });
-    download("bioagentdb-workbench.jsonl", lines.join("\n") + "\n", "application/jsonl");
+    download("bioagentdb-ask-the-agent.jsonl", lines.join("\n") + "\n", "application/jsonl");
   }
   function exportCSV() {
     const sets = selectedSets();
@@ -860,7 +860,7 @@
         r.missing.join("|"), r.contradicted.join("|"), r.quote, r.url]);
     }));
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    download("bioagentdb-workbench.csv", csv + "\n", "text/csv");
+    download("bioagentdb-ask-the-agent.csv", csv + "\n", "text/csv");
   }
 
   /* ---------------- record detail (shared modal) + live verify ---------------- */

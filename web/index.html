@@ -14,7 +14,7 @@
     <a href="/topics">Topics</a>
     <a href="/method">Method</a>
     <a href="/records">Records</a>
-    <a class="navlink" href="/workbench">Workbench</a>
+    <a class="navlink" href="/ask">Ask the agent</a>
     <a class="navlink" href="/mining">My mining</a>
     <a href="/guide">Guide</a>
   </div>
@@ -147,18 +147,18 @@
       <text class="sub" x="922" y="272">records / evidence / live links</text>
 
       <!-- in-SVG call to action -->
-      <g class="svg-cta" role="button" tabindex="0" aria-label="Open Workbench"
-         onclick="location.href='/workbench'"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.href='/workbench'}">
+      <g class="svg-cta" role="button" tabindex="0" aria-label="Ask the agent"
+         onclick="location.href='/ask'"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.href='/ask'}">
         <rect class="cta-bg" x="416" y="294" width="248" height="48" rx="24"/>
         <path class="cta-glyph" d="M448,308 h20 a7,7 0 0 1 7,7 v10 a7,7 0 0 1 -7,7 h-11 l-7,7 v-7 h-2 a7,7 0 0 1 -7,-7 v-10 a7,7 0 0 1 7,-7 z"/>
-        <text class="cta-text" x="556" y="324">Open Workbench</text>
+        <text class="cta-text" x="556" y="324">Ask the agent</text>
       </g>
     </svg>
   </figure>
 
   <div class="hero-cta cta-html">
-    <button class="primary" onclick="location.href='/workbench'">Open Workbench</button>
+    <button class="primary" onclick="location.href='/ask'">Ask the agent</button>
     <span class="cta-hint">search the catalog &mdash; or tell the agent what to mine next</span>
   </div>
   <div class="stats">
@@ -222,7 +222,7 @@
     </div>
   </div>
   <p class="howto">New here? <b>Search</b> the ledger, <b>open a record</b> for its evidence,
-    or <b>open Workbench</b> in plain language — see the
+    or <b>ask the agent</b> in plain language — see the
     <a href="/guide">3-step guide</a>.</p>
   <div class="ledger-toolbar">
     <input id="rec-q" placeholder="Search papers, tissues, modalities, accessions&hellip;"
@@ -253,14 +253,14 @@
 <!-- ============ Ask (modal, opened from the hero) ============ -->
 <div id="chat-modal" class="modal hidden">
   <div class="modalbox" style="max-width:780px">
-    <div class="modalhead"><h3>Open Workbench</h3><button onclick="closeChat()">x</button></div>
+    <div class="modalhead"><h3>Ask the agent</h3><button onclick="closeChat()">x</button></div>
     <div class="chatbox" style="border:0; border-radius:0; height:min(520px,64vh)">
       <div id="chat-log" class="chatlog"></div>
       <div class="chatin">
         <textarea id="chat-input" rows="2"
           placeholder="e.g. &quot;gut microbiome metagenomics&quot; or &quot;single-nucleus RNA-seq of human brain in Alzheimer disease&quot;"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend()}"></textarea>
-        <button class="primary" onclick="chatSend()">Ask</button>
+        <button class="primary" onclick="chatSend()">Send</button>
       </div>
     </div>
   </div>

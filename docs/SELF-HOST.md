@@ -91,7 +91,7 @@ BIOAGENTDB_DB_PATH=data/releases/_v16/bioagentdb.sqlite3 python scripts/cli.py s
 ## 7. Mine your first theme
 
 **From the site** (needs `DEEPSEEK_API_KEY` + a running scheduler: `--with-mining` / `--profile mining`):
-open the home-page chat (or `workbench.html` → Ming), describe the topic, confirm the mining task,
+open the home-page chat (or `/ask` → Ming), describe the topic, confirm the mining task,
 watch `mining.html`. On a blank DB the prewarm profile creates its configured themes on demand.
 
 **From the CLI** (no scheduler):

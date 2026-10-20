@@ -689,8 +689,9 @@ def public_tab():
     return FileResponse(str(WEB_DIR / "index.html"), media_type="text/html")
 
 
+@app.api_route("/ask", methods=["GET", "HEAD"], include_in_schema=False)
 @app.api_route("/workbench", methods=["GET", "HEAD"], include_in_schema=False)
-def workbench_alias():
+def ask_alias():
     return FileResponse(str(WEB_DIR / "workbench.html"), media_type="text/html")
 
 

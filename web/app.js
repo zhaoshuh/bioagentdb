@@ -91,7 +91,7 @@ function renderDiseases(items) {
   wrap.innerHTML = "";
   if (!items.length) {
     wrap.innerHTML = '<p class="muted" style="grid-column:1/-1">No topics yet — open ' +
-      '<a href="/workbench.html">Ming</a> and mine what you need.</p>';
+      '<a href="/ask">Ming</a> and mine what you need.</p>';
     const more0 = document.getElementById("diseases-more");
     if (more0) more0.style.display = "none";
     return;
@@ -295,9 +295,9 @@ function showLedgerBand(it) {
     `${cleanQuote(it.title, 76)} \u00b7 ${pick.acc}${more}`;
 }
 
-/* Record / dataset detail modal moved to /record-modal.js (shared with the workbench). */
+/* Record / dataset detail modal moved to /record-modal.js (shared with Ask the agent). */
 
-/* Dataset detail modal moved to /record-modal.js (shared with the workbench). */
+/* Dataset detail modal moved to /record-modal.js (shared with Ask the agent). */
 
 async function exportCsv() {
   const body = {
